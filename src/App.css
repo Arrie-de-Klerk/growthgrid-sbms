@@ -1,0 +1,55 @@
+/* ---------- Auth ---------- */
+
+.auth-card {
+  background: #ffffff;
+  padding: 28px;
+  border-radius: 12px;
+  width: 340px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.auth-form input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.auth-form button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #222;
+  color: white;
+  cursor: pointer;
+}
+
+.auth-switch {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.auth-switch button {
+  background: none;
+  border: none;
+  color: #0066cc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.error {
+  color: #b00020;
+  font-size: 13px;
+}
+
+.muted {
+  color: #666;
+  font-size: 14px;
+}
