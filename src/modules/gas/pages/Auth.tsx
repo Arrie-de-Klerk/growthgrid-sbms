@@ -7,7 +7,9 @@ export default function Auth() {
 
   useEffect(() => {
     async function run() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!user) {
         navigate("/", { replace: true });
@@ -16,7 +18,7 @@ export default function Auth() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, business_type")
         .eq("id", user.id)
         .single();
 
@@ -26,15 +28,20 @@ export default function Auth() {
         return;
       }
 
+      if (data.business_type !== "gas") {
+        navigate("/", { replace: true });
+        return;
+      }
+
       if (data.role === "owner") {
-        navigate("/owner", { replace: true });
+        navigate("/gas", { replace: true });
       } else {
-        navigate("/clerk", { replace: true });
+        navigate("/gas/clerk", { replace: true });
       }
     }
 
     run();
-  }, []);
+  }, [navigate]);
 
   return <p>Checking authentication…</p>;
 }

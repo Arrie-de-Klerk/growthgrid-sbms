@@ -1,131 +1,244 @@
-// src/pages/OwnerDashboard.tsx
+// src/modules/gas/pages/OwnerDashboard.tsx
 
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { supabase } from "../../../shared/lib/supabase";
+
+type SummaryState = {
+  ordered: number;
+  inProgress: number;
+  completedToday: number;
+
+  quote: number;
+  pending: number;
+  approved: number;
+  installInProgress: number;
+  installCompleted: number;
+};
+
+const emptySummary: SummaryState = {
+  ordered: 0,
+  inProgress: 0,
+  completedToday: 0,
+
+  quote: 0,
+  pending: 0,
+  approved: 0,
+  installInProgress: 0,
+  installCompleted: 0,
+};
 
 export default function OwnerDashboard() {
   const navigate = useNavigate();
-
-  // GAS
-  const [ordered, setOrdered] = useState(0);
-  const [inProgress, setInProgress] = useState(0);
-  const [completedToday, setCompletedToday] = useState(0);
-
-  // INSTALLATIONS
-  const [quote, setQuote] = useState(0);
-  const [pending, setPending] = useState(0);
-  const [approved, setApproved] = useState(0);
-  const [installInProgress, setInstallInProgress] = useState(0);
-  const [installCompleted, setInstallCompleted] = useState(0);
+  const [businessName, setBusinessName] = useState("Gas Business");
+  const [summary, setSummary] = useState<SummaryState>(emptySummary);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     loadSummary();
   }, []);
 
+  async function getBusinessId() {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) throw sessionError;
+    if (!session?.user) throw new Error("No signed-in user found.");
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("business_id")
+      .eq("id", session.user.id)
+      .single();
+
+    if (profileError) throw profileError;
+    if (!profile?.business_id) {
+      throw new Error("This user is not linked to a business yet.");
+    }
+
+    return profile.business_id as string;
+  }
+
+  async function countRows(
+    table: string,
+    businessId: string,
+    statuses: string[],
+    todayOnly = false
+  ) {
+    let query = supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .in("status", statuses);
+
+    if (todayOnly) {
+      query = query.eq("business_date", getTodayISO());
+    }
+
+    const { count, error } = await query;
+
+    if (error) {
+      console.error(`Count error on ${table}:`, error.message);
+      return 0;
+    }
+
+    return count || 0;
+  }
+
   async function loadSummary() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    setLoading(true);
+    setErrorMsg(null);
 
-    // GAS COUNTS
-    const { count: orderedCount } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "ordered");
+    try {
+      const businessId = await getBusinessId();
 
-    const { count: inProgressCount } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "in_progress");
+      const { data: business } = await supabase
+         .from("businesses")
+         .select("*")
+         .eq("id", businessId)
+         .maybeSingle();
 
-    const { count: completedTodayCount } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "completed")
-      .gte("business_date", today.toISOString());
+       setBusinessName(
+         business?.name ||
+          business?.business_name ||
+          business?.company_name ||
+          "Gas Business"
+      );
 
-    setOrdered(orderedCount || 0);
-    setInProgress(inProgressCount || 0);
-    setCompletedToday(completedTodayCount || 0);
+      const [
+        ordered,
+        inProgress,
+        completedToday,
+        quote,
+        pending,
+        approved,
+        installInProgress,
+        installCompleted,
+      ] = await Promise.all([
+        countRows("orders", businessId, ["ordered"]),
+        countRows("orders", businessId, ["in_progress"]),
+        countRows("orders", businessId, ["completed"], true),
 
-    // INSTALLATIONS COUNTS
-    const { count: quoteCount } = await supabase
-      .from("installations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "quote");
+        countRows("installations", businessId, ["quote", "quote_pending", "planned"]),
+        countRows("installations", businessId, ["pending"]),
+        countRows("installations", businessId, ["approved"]),
+        countRows("installations", businessId, ["in_progress"]),
+        countRows("installations", businessId, ["completed"]),
+      ]);
 
-    const { count: pendingCount } = await supabase
-      .from("installations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending");
-
-    const { count: approvedCount } = await supabase
-      .from("installations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "approved");
-
-    const { count: installInProgressCount } = await supabase
-      .from("installations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "in_progress");
-
-    const { count: installCompletedCount } = await supabase
-      .from("installations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "completed");
-
-    setQuote(quoteCount || 0);
-    setPending(pendingCount || 0);
-    setApproved(approvedCount || 0);
-    setInstallInProgress(installInProgressCount || 0);
-    setInstallCompleted(installCompletedCount || 0);
+      setSummary({
+        ordered,
+        inProgress,
+        completedToday,
+        quote,
+        pending,
+        approved,
+        installInProgress,
+        installCompleted,
+      });
+    } catch (err: any) {
+      console.error("OwnerDashboard load error:", err.message);
+      setErrorMsg(err.message || "Could not load dashboard summary.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div style={{ padding: 40, maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 32, fontWeight: 700 }}>Owner Dashboard</h1>
-      <p style={{ color: "#666" }}>Hermanus Gas – business overview</p>
+    <div style={pageStyle}>
+      <div style={headerStyle}>
+        <div>
+          <h1 style={titleStyle}>Owner Dashboard</h1>
+          <p style={subtitleStyle}>{businessName} – business overview</p>
+        </div>
+
+        <button onClick={loadSummary} style={refreshBtnStyle}>
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p style={infoStyle}>Loading dashboard...</p>}
+
+      {errorMsg && (
+        <div style={errorStyle}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       {/* GAS STRIP */}
       <section style={{ marginTop: 30 }}>
-        <h3>🟢 Gas Operations</h3>
+        <h3 style={sectionTitleStyle}>🟢 Gas Operations</h3>
 
         <div style={stripStyle}>
           {renderStatusBox(
             "Ordered",
-            ordered,
+            summary.ordered,
             "#d32f2f",
-            () => navigate("/dashboard/owner/deliveries?status=ordered")
+            () => navigate("/gas/deliveries?status=ordered")
           )}
 
           {renderStatusBox(
             "In Progress",
-            inProgress,
+            summary.inProgress,
             "#f57c00",
-            () => navigate("/dashboard/owner/deliveries?status=in_progress")
+            () => navigate("/gas/deliveries?status=in_progress")
           )}
 
           {renderStatusBox(
             "Completed Today",
-            completedToday,
+            summary.completedToday,
             "#388e3c",
-            () => navigate("/dashboard/owner/deliveries?status=completed")
+            () => navigate("/gas/deliveries?status=completed")
           )}
         </div>
       </section>
 
       {/* INSTALLATIONS STRIP */}
       <section style={{ marginTop: 40 }}>
-        <h3>🔴 Installations Operations</h3>
+        <h3 style={sectionTitleStyle}>🔧 Installations Operations</h3>
 
         <div style={stripStyle}>
-          {renderStripBox("Quote", quote, "#eeeeee")}
-          {renderStripBox("Pending", pending, "#d32f2f")}
-          {renderStripBox("Approved", approved, "#f57c00")}
-          {renderStripBox("In Progress", installInProgress, "#1976d2")}
-          {renderStripBox("Completed", installCompleted, "#388e3c")}
-      </div>
-       </section>
+          {renderStatusBox(
+            "Quote",
+            summary.quote,
+            "#eeeeee",
+            () => navigate("/gas/installations?status=quote"),
+            true
+          )}
+
+          {renderStatusBox(
+            "Pending",
+            summary.pending,
+            "#d32f2f",
+            () => navigate("/gas/installations?status=pending")
+          )}
+
+          {renderStatusBox(
+            "Approved",
+            summary.approved,
+            "#f57c00",
+            () => navigate("/gas/installations?status=approved")
+          )}
+
+          {renderStatusBox(
+            "In Progress",
+            summary.installInProgress,
+            "#1976d2",
+            () => navigate("/gas/installations?status=in_progress")
+          )}
+
+          {renderStatusBox(
+            "Completed",
+            summary.installCompleted,
+            "#388e3c",
+            () => navigate("/gas/installations?status=completed")
+          )}
+        </div>
+      </section>
 
       {/* MAIN MODULES */}
       <section style={gridStyle}>
@@ -133,112 +246,93 @@ export default function OwnerDashboard() {
           "👥 Customers",
           "Customers captured from clerk orders",
           "View customers",
-          () => navigate("/dashboard/owner/customers")
+          () => navigate("/gas/customers")
         )}
 
         {renderCard(
           "🛢️ Cylinder Movements",
-          "Track full, empty, damage & supplier stock",
+          "Track full, empty, damaged & supplier stock",
           "Open Movements",
-          () => navigate("/dashboard/owner/cylinder-movements")
+          () => navigate("/gas/cylinder-movements")
         )}
 
         {renderCard(
           "📦 Deliveries",
-          "Orders, pending & completed deliveries",
+          "Orders, pending and completed deliveries",
           "View deliveries",
-          () => navigate("/dashboard/owner/deliveries")
+          () => navigate("/gas/deliveries")
         )}
 
         {renderCard(
           "🚚 Vehicle Operations",
-          "Daily vehicle logs",
+          "Daily vehicle logs from clerks",
           "Open Operations",
-          () => navigate("/dashboard/owner/vehicle-operations")
+          () => navigate("/gas/vehicle-operations")
         )}
 
         {renderCard(
           "🔧 Installations",
-          "Quotations & gas installations",
+          "Quotations and gas installations",
           "View installations",
-          () => navigate("/dashboard/owner/installations")
+          () => navigate("/gas/installations")
         )}
 
         {renderCard(
           "🛣 Transport",
-          "Transport totals and costing",
+          "Transport totals, fuel and costing",
           "Open Transport",
-          () => navigate("/dashboard/owner/transport")
+          () => navigate("/gas/transport")
         )}
 
         {renderCard(
           "💰 Money",
-          "Full income statement",
+          "Income, expenses and monthly totals",
           "Open Money",
-          () => navigate("/dashboard/owner/money")
+          () => navigate("/gas/money")
         )}
 
         {renderCard(
           "🗂 Vehicle Registry",
           "Register and manage business vehicles",
           "Open Registry",
-          () => navigate("/dashboard/owner/vehicle-registry")
+          () => navigate("/gas/vehicle-registry")
         )}
       </section>
     </div>
   );
 }
 
-
 /* ================= HELPERS ================= */
 
-const stripStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-  gap: "12px",
-};
-
-const gridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-  gap: "20px",
-  marginTop: "40px",
-};
-
-const boxStyle = {
-  padding: "14px",
-  borderRadius: "10px",
-  textAlign: "center" as const,
-};
-
-function renderStripBox(label: string, value: number, color = "#f5f5f5") {
-  return (
-    <div style={{ ...boxStyle, background: color, color: color === "#f5f5f5" || color === "#eeeeee" ? "#000" : "#fff" }}>
-      <div style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
-    </div>
-  );
+function getTodayISO() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function renderStatusBox(
   label: string,
   value: number,
   color: string,
-  onClick: () => void
+  onClick: () => void,
+  lightText = false
 ) {
   return (
-    <div
+    <button
       onClick={onClick}
       style={{
         ...boxStyle,
         background: color,
-        color: "#fff",
+        color: lightText ? "#111" : "#fff",
+        border: "none",
         cursor: "pointer",
       }}
     >
-      <div style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 900 }}>{value}</div>
-    </div>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{value}</div>
+    </button>
   );
 }
 
@@ -249,19 +343,116 @@ function renderCard(
   onClick: () => void
 ) {
   return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: 12,
-        padding: 20,
-        background: "#fff",
-      }}
-    >
-      <h2 style={{ fontSize: 18 }}>{title}</h2>
-      <p style={{ fontSize: 14, color: "#666" }}>{description}</p>
-      <button onClick={onClick} style={{ marginTop: 10 }}>
+    <div style={cardStyle}>
+      <h2 style={cardTitleStyle}>{title}</h2>
+      <p style={cardTextStyle}>{description}</p>
+
+      <button onClick={onClick} style={cardButtonStyle}>
         {actionLabel}
       </button>
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const pageStyle: CSSProperties = {
+  padding: 40,
+  maxWidth: 1200,
+  margin: "0 auto",
+};
+
+const headerStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+};
+
+const titleStyle: CSSProperties = {
+  fontSize: 32,
+  fontWeight: 800,
+  margin: 0,
+};
+
+const subtitleStyle: CSSProperties = {
+  color: "#666",
+  marginTop: 6,
+};
+
+const sectionTitleStyle: CSSProperties = {
+  marginBottom: 12,
+};
+
+const stripStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: "12px",
+};
+
+const gridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+  gap: "20px",
+  marginTop: "40px",
+};
+
+const boxStyle: CSSProperties = {
+  padding: "16px",
+  borderRadius: "12px",
+  textAlign: "center",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+};
+
+const cardStyle: CSSProperties = {
+  border: "1px solid #ddd",
+  borderRadius: 14,
+  padding: 22,
+  background: "#fff",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+};
+
+const cardTitleStyle: CSSProperties = {
+  fontSize: 18,
+  marginTop: 0,
+};
+
+const cardTextStyle: CSSProperties = {
+  fontSize: 14,
+  color: "#666",
+  minHeight: 40,
+};
+
+const cardButtonStyle: CSSProperties = {
+  marginTop: 12,
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "none",
+  background: "#111",
+  color: "#fff",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const refreshBtnStyle: CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  background: "#fff",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const infoStyle: CSSProperties = {
+  marginTop: 20,
+  color: "#666",
+};
+
+const errorStyle: CSSProperties = {
+  marginTop: 20,
+  padding: 14,
+  borderRadius: 10,
+  background: "#ffebee",
+  color: "#b71c1c",
+  fontWeight: 700,
+};

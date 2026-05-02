@@ -1,9 +1,7 @@
-// src/modules/gas/pages/Login.tsx
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { supabase } from "../../../shared/lib/supabase";
-import "../../../App.css";
+import { supabase } from "../lib/supabase";
+import "../../App.css";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,38 +10,68 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setErrorMsg(null);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setLoading(false);
-
     if (error || !data.session) {
-      setError(error?.message || "Login failed");
+      setLoading(false);
+      setErrorMsg(error?.message || "Login failed");
       return;
     }
 
-    // ⭐ VERY IMPORTANT
-    // We go to root → DashboardGate decides owner / clerk
-    navigate("/dashboard", { replace: true });
-  }
+    // 🔥 GET PROFILE
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, business_type")
+      .eq("id", data.session.user.id)
+      .single();
+
+    if (!profile) {
+      setErrorMsg("Profile not found");
+      setLoading(false);
+      return;
+    }
+
+    // GAS
+     if (profile.business_type === "gas") {
+       if (profile.role === "owner") {
+         navigate("/gas", { replace: true });
+       } else {
+         navigate("/gas/clerk", { replace: true });
+       }
+     }
+
+     // MOTOR SALES
+     else if (profile.business_type === "motor-sales") {
+       if (profile.role === "owner") {
+         navigate("/motor", { replace: true });
+       } else {
+         navigate("/motor/team", { replace: true });
+       }
+     }
+
+    // fallback
+    else {
+      setErrorMsg("System not configured");
+    }
+
+    setLoading(false);
+  } // ✅ THIS WAS MISSING
 
   return (
     <div className="centered">
       <div className="auth-card">
         <h1>GrowthGrid</h1>
-          <p style={{ marginTop: 5, color: "#666" }}>
-              Smart Business Management System
-          </p>
-          <p className="muted">Login</p>
+        <p className="muted">Login</p>
 
         <form onSubmit={handleLogin} className="auth-form">
           <input
@@ -61,7 +89,7 @@ export default function Login() {
             required
           />
 
-          {error && <div className="error">{error}</div>}
+          {errorMsg && <div className="error">{errorMsg}</div>}
 
           <button disabled={loading}>
             {loading ? "Signing in…" : "Login"}
@@ -70,12 +98,9 @@ export default function Login() {
           <p className="muted" style={{ marginTop: 10 }}>
             No account? <Link to="/register">Register</Link>
           </p>
-
-          <p className="muted" style={{ marginTop: 6 }}>
-            Forgot password? <Link to="/reset-password">Reset</Link>
-          </p>
         </form>
       </div>
     </div>
   );
 }
+

@@ -14,15 +14,20 @@ export default function AuthGate({ children }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getSession().then(({ data }) => {
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
+
       if (cancelled) return;
 
       if (!data.session) {
-        navigate("/", { replace: true }); // Login page
-      } else {
-        setLoading(false);
+        navigate("/", { replace: true }); // ✅ send to real login page
+        return;
       }
-    });
+
+      setLoading(false);
+    };
+
+    checkUser();
 
     return () => {
       cancelled = true;
