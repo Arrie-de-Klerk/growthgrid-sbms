@@ -300,7 +300,6 @@ export default function OwnerCylinderMovement() {
 
             {cylinderOrder.map((size) => {
               const moves = movementsBySize[size] || [];
-              if (moves.length === 0) return null;
 
               let fullStock = openingStock[size] || 0;
               let emptyStock = 0;
@@ -323,26 +322,39 @@ export default function OwnerCylinderMovement() {
                       </thead>
 
                       <tbody>
-                        {moves.map((move, index) => {
-                          const opening = fullStock;
+            {moves.length === 0 && (
+             <tr>
+               <td style={{ ...td, fontWeight: 700, color: "#666" }}>
+                Opening stock only
+               </td>
+               <td style={td}>{openingStock[size] || 0}</td>
+               <td style={td}>0</td>
+               <td style={td}>0</td>
+               <td style={td}>{openingStock[size] || 0}</td>
+               <td style={td}>{openingStock[size] || 0}</td>
+             </tr>
+            )}
 
-                          fullStock = fullStock - move.fullOut;
-                          emptyStock = emptyStock + move.emptyIn;
+            {moves.map((move, index) => {
+              const opening = fullStock;
 
-                          const total = fullStock + emptyStock;
+              fullStock = fullStock - move.fullOut;
+              emptyStock = emptyStock + move.emptyIn;
 
-                          return (
-                            <tr key={`${size}-${move.date}-${index}`}>
-                              <td style={td}>{formatDate(move.date)}</td>
-                              <td style={td}>{opening}</td>
-                              <td style={td}>{move.fullOut}</td>
-                              <td style={td}>{move.emptyIn}</td>
-                              <td style={td}>{fullStock}</td>
-                              <td style={td}>{total}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
+              const total = fullStock + emptyStock;
+
+             return (
+               <tr key={`${size}-${move.date}-${index}`}>
+                 <td style={td}>{formatDate(move.date)}</td>
+                 <td style={td}>{opening}</td>
+                 <td style={td}>{move.fullOut}</td>
+                 <td style={td}>{move.emptyIn}</td>
+                 <td style={td}>{fullStock}</td>
+                 <td style={td}>{total}</td>
+               </tr>
+             );
+            })}
+           </tbody>
                     </table>
                   </div>
                 </div>
@@ -381,11 +393,11 @@ function normalizeCylinderSize(value: string | null) {
 
   const cleaned = value.toLowerCase().replace(/\s/g, "");
 
-  if (cleaned.includes("9kg")) return "9kg";
-  if (cleaned.includes("12kg")) return "12kg";
-  if (cleaned.includes("14kg")) return "14kg";
-  if (cleaned.includes("19kg")) return "19kg";
   if (cleaned.includes("48kg")) return "48kg";
+  if (cleaned.includes("19kg")) return "19kg";
+  if (cleaned.includes("14kg")) return "14kg";
+  if (cleaned.includes("12kg")) return "12kg";
+  if (cleaned.includes("9kg")) return "9kg";
 
   return null;
 }

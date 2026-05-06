@@ -51,6 +51,8 @@ import ClerkDeliveries from "./modules/gas/pages/ClerkDeliveries";
 import ClerkVehicleRegistry from "./modules/gas/pages/ClerkVehicleRegistry";
 import ClerkSales from "./modules/gas/pages/ClerkSales";
 import ClerkInstallations from "./modules/gas/pages/ClerkInstallations";
+import GasInvoicePrint from "./modules/gas/pages/GasInvoicePrint";
+import GasSalesInvoicePrint from "./modules/gas/pages/GasSalesInvoicePrint";
 
 export default function App() {
   return (
@@ -112,6 +114,9 @@ export default function App() {
         <Route path="/gas/clerk/vehicle-registry" element={<ClerkVehicleRegistry />} />
         <Route path="/gas/clerk/sales" element={<ClerkSales />} />
         <Route path="/gas/clerk/installations" element={<ClerkInstallations />} />
+        <Route path="/gas/invoice/:orderId" element={<GasInvoicePrint />} />
+        <Route path="/gas/sales-invoice/:saleId" element={<GasSalesInvoicePrint />} />
+        
 
         {/* FALLBACK */}
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -125,6 +125,23 @@ export default function ClerkNewOrder() {
     return `CUS-${String(nextNumber).padStart(4, "0")}`;
   }
 
+  async function generateInvoiceNumber(activeBusinessId: string) {
+  const year = new Date().getFullYear();
+
+  const { count, error } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", activeBusinessId)
+    .gte("business_date", `${year}-01-01`)
+    .lt("business_date", `${year + 1}-01-01`);
+
+  if (error) throw error;
+
+  const nextNumber = (count || 0) + 1;
+
+  return `INV-${year}-${String(nextNumber).padStart(5, "0")}`;
+}
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -249,35 +266,44 @@ export default function ClerkNewOrder() {
         if (instErr) throw instErr;
       }
 
-      const { error: orderError } = await supabase.from("orders").insert({
-        business_id: businessId,
-        clerk_id: user.id,
-        business_date: getTodayISO(),
+      const invoiceNumber = await generateInvoiceNumber(businessId);
 
-        customer_id: customerId,
-        customer_name: customerName.trim(),
-        contact_name: contactName.trim() || null,
+      const { data: savedOrder, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          business_id: businessId,
+          clerk_id: user.id,
+          business_date: getTodayISO(),
 
-        gas_cylinder: isGasOrder ? gasCylinder : null,
-        quantity: finalQuantity,
-        unit_price: finalUnitPrice,
-        total_price: totalPrice,
+          invoice_number: invoiceNumber,
+          payment_method: "card_on_delivery",
 
-        status: "ordered",
+          customer_id: customerId,
+          customer_name: customerName.trim(),
+          contact_name: contactName.trim() || null,
 
-        quote_type: quoteType === "None" ? null : quoteType,
-        other_description:
-          quoteType === "Other" ? otherDescription.trim() : null,
+          gas_cylinder: isGasOrder ? gasCylinder : null,
+          quantity: finalQuantity,
+          unit_price: finalUnitPrice,
+          total_price: totalPrice,
 
-        phone: cleanPhone,
-        email: email.trim() || null,
-        address: address.trim(),
-        area: area.trim(),
-      });
+          status: "ordered",
+
+          quote_type: quoteType === "None" ? null : quoteType,
+          other_description:
+            quoteType === "Other" ? otherDescription.trim() : null,
+
+          phone: cleanPhone,
+          email: email.trim() || null,
+          address: address.trim(),
+          area: area.trim(),
+        })
+        .select("id")
+        .single();
 
       if (orderError) throw orderError;
 
-      navigate("/gas/clerk");
+      navigate(`/gas/invoice/${savedOrder.id}?print=1`);
     } catch (err: any) {
       console.error("New order error:", err.message);
       setError(err.message || "Could not save order.");
@@ -324,13 +350,15 @@ export default function ClerkNewOrder() {
             </label>
 
             <label style={labelStyle}>
-              Contact Name
+                 Business Contact Person
               <input
-                placeholder="Optional if business"
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                style={inputStyle}
-              />
+                 name="business_contact_person"
+                 placeholder="Only for business deliveries"
+                 value={contactName}
+                 onChange={(e) => setContactName(e.target.value)}
+                 style={inputStyle}
+                 autoComplete="off"
+             />
             </label>
 
             <label style={labelStyle}>
@@ -477,7 +505,7 @@ export default function ClerkNewOrder() {
         </section>
 
         <button type="submit" disabled={loading} style={submitButtonStyle}>
-          {loading ? "Saving..." : "Save Order"}
+          {loading ? "Saving..." : "Save & Print Invoice"}
         </button>
       </form>
     </div>

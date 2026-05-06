@@ -122,6 +122,23 @@ export default function ClerkSales() {
     0
   );
 
+  async function generateCounterSaleInvoiceNumber(activeBusinessId: string) {
+    const year = new Date().getFullYear();
+
+    const { count, error } = await supabase
+      .from("sales")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", activeBusinessId)
+      .gte("created_at", `${year}-01-01`)
+      .lt("created_at", `${year + 1}-01-01`);
+
+     if (error) throw error;
+
+    const nextNumber = (count || 0) + 1;
+
+    return `CS-${year}-${String(nextNumber).padStart(5, "0")}`;
+  }
+
   async function saveSale() {
     if (saving) return;
 
@@ -160,10 +177,13 @@ export default function ClerkSales() {
 
       setSaving(true);
 
+      const invoiceNumber = await generateCounterSaleInvoiceNumber(businessId);
+
       const { data: sale, error: saleError } = await supabase
         .from("sales")
         .insert({
           business_id: businessId,
+          invoice_number: invoiceNumber,
           customer_name: customer.trim() || null,
           payment_type: paymentType,
           total_amount: total,
@@ -187,11 +207,8 @@ export default function ClerkSales() {
 
       if (itemError) throw itemError;
 
-      alert("Sale saved successfully.");
+      navigate(`/gas/sales-invoice/${sale.id}?print=1`);
 
-      setItems([]);
-      setCustomer("");
-      setPaymentType("cash");
     } catch (err: any) {
       console.error("Counter sale save error:", err.message);
       setErrorMsg(err.message || "Could not save sale.");
@@ -336,7 +353,7 @@ export default function ClerkSales() {
         disabled={saving}
         style={completeButtonStyle}
       >
-        {saving ? "Saving..." : "Complete Sale"}
+        {saving ? "Saving..." : "Complete Sale & Print Invoice"}
       </button>
     </div>
   );
