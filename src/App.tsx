@@ -6,6 +6,14 @@ import Login from "./shared/auth/Login";
 import Register from "./shared/auth/Register";
 import ResetPassword from "./modules/gas/pages/ResetPassword";
 
+
+/* ACCOUNTING OWNER */
+import OwnerAccountingDashboard from "./modules/accounting/pages/OwnerAccountingDashboard";
+import AccountingClients from "./modules/accounting/pages/AccountingClients";
+import AccountingClientNew from "./modules/accounting/pages/AccountingClientNew";
+import AccountingClientDetail from "./modules/accounting/pages/AccountingClientDetail";
+
+
 /* GAS OWNER */
 import OwnerDashboard from "./modules/gas/pages/OwnerDashboard";
 import OwnerDeliveries from "./modules/gas/pages/OwnerDeliveries";
@@ -59,13 +67,23 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* AUTH */}
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* ROLE / MODULE GATE - add once those pages exist */}
         {/* <Route path="/auth" element={<DashboardGate />} /> */}
         {/* <Route path="/select-module" element={<SelectModule />} /> */}
+
+        {/* ACCOUNTING OWNER */}
+        <Route path="/accounting" element={<OwnerAccountingDashboard />} />
+        <Route path="/accounting/owner" element={<Navigate to="/accounting" replace />} />
+        <Route path="/accounting/clients" element={<AccountingClients />} />
+        <Route path="/accounting/clients/new" element={<AccountingClientNew />} />
+        <Route path="/accounting/clients/:id" element={<AccountingClientDetail />} />
+
+
 
         {/* GAS OWNER */}
         <Route path="/gas" element={<OwnerDashboard />} />
@@ -83,6 +101,7 @@ export default function App() {
         {/* MOTOR OWNER */}
         <Route path="/motor" element={<OwnerMotorDashboard />} />
         <Route path="/motor/stock" element={<OwnerMotorStock />} />
+        <Route path="/motor/owner" element={<Navigate to="/motor" replace />} />
         {/* <Route path="/motor/stock/new" element={<OwnerMotorStockNew />} /> */}
         {/* <Route path="/motor/stock/:id" element={<OwnerMotorStockDetail />} /> */}
 
@@ -98,9 +117,7 @@ export default function App() {
         <Route path="/motor/bestsellers" element={<OwnerMotorBestSellers />} />
         <Route path="/motor/team" element={<OwnerMotorTeam />} />
 
-        <Route
-          path="/motor/admin"
-          element={<Navigate to="/motor/admin/approved-delivery" replace />}
+        <Route path="/motor/admin" element={<Navigate to="/motor/admin/approved-delivery" replace />}
         />
         <Route path="/motor/admin/documents" element={<OwnerMotorAdminDocuments />} />
         <Route path="/motor/admin/finance" element={<OwnerMotorFinanceAdmin />} />
@@ -119,7 +136,7 @@ export default function App() {
         
 
         {/* FALLBACK */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

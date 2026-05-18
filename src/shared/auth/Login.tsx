@@ -41,30 +41,39 @@ export default function Login() {
       return;
     }
 
-    // GAS
-     if (profile.business_type === "gas") {
-       if (profile.role === "owner") {
-         navigate("/gas", { replace: true });
-       } else {
-         navigate("/gas/clerk", { replace: true });
-       }
-     }
+  const businessType = String(profile.business_type || "").trim().toLowerCase();
+const role = String(profile.role || "").trim().toLowerCase();
 
-     // MOTOR SALES
-     else if (profile.business_type === "motor-sales") {
-       if (profile.role === "owner") {
-         navigate("/motor", { replace: true });
-       } else {
-         navigate("/motor/team", { replace: true });
-       }
-     }
+// GAS
+if (businessType === "gas") {
+  if (role === "owner") {
+    navigate("/gas", { replace: true });
+  } else {
+    navigate("/gas/clerk", { replace: true });
+  }
+  return;
+}
 
-    // fallback
-    else {
-      setErrorMsg("System not configured");
-    }
+// ACCOUNTING
+if (businessType === "accounting") {
+  navigate("/accounting", { replace: true });
+  return;
+}
 
-    setLoading(false);
+// MOTOR SALES
+if (businessType === "motor-sales" || businessType === "motor") {
+  if (role === "owner") {
+    navigate("/motor", { replace: true });
+  } else {
+    navigate("/motor/team", { replace: true });
+  }
+  return;
+}
+
+// FALLBACK
+setErrorMsg(`Business type not connected yet: ${profile.business_type}`);
+setLoading(false);
+
   } // ✅ THIS WAS MISSING
 
   return (
