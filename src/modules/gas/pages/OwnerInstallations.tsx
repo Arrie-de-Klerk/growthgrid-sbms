@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../shared/lib/supabase";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { CSSProperties } from "react";
 
 type InstallationStatus =
@@ -221,48 +221,7 @@ export default function OwnerInstallations() {
         <SummaryBox label="In Progress" value={summary.inProgress.toString()} />
         <SummaryBox label="Completed" value={summary.completed.toString()} />
       </div>
-
-      <div style={filterRowStyle}>
-        <button onClick={() => navigate("/gas/installations")} style={filterButtonStyle}>
-          All
-        </button>
-
-        <button
-          onClick={() => navigate("/gas/installations?status=quote")}
-          style={filterButtonStyle}
-        >
-          Quote
-        </button>
-
-        <button
-          onClick={() => navigate("/gas/installations?status=pending")}
-          style={filterButtonStyle}
-        >
-          Pending
-        </button>
-
-        <button
-          onClick={() => navigate("/gas/installations?status=approved")}
-          style={filterButtonStyle}
-        >
-          Approved
-        </button>
-
-        <button
-          onClick={() => navigate("/gas/installations?status=in_progress")}
-          style={filterButtonStyle}
-        >
-          In Progress
-        </button>
-
-        <button
-          onClick={() => navigate("/gas/installations?status=completed")}
-          style={filterButtonStyle}
-        >
-          Completed
-        </button>
-      </div>
-
+      
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -359,38 +318,54 @@ export default function OwnerInstallations() {
                       <button
                         onClick={() => navigate(`/gas/installations/${item.id}`)}
                         style={primaryActionStyle}
-                      >
-                        Open Detail
+  >
+                      Open Detail
                       </button>
 
-                      <button
-                        onClick={() => updateStatus(item.id, "pending")}
-                        style={actionButtonStyle}
-                      >
-                        Save Quote
-                      </button>
+                     <Link to={`/gas/installations/quote/${item.id}`}>
+                       <button type="button" style={actionButtonStyle}>
+                      Print Quote
+                     </button>
+                     </Link>
+
+                       {["approved", "in_progress", "completed"].includes(
+                        String(item.status || "").toLowerCase()
+                      ) && (
+                     <Link to={`/gas/installations/invoice/${item.id}`}>
+                     <button type="button" style={primaryActionStyle}>
+                      Print Invoice
+                     </button>
+                     </Link>
+                        )}
 
                       <button
-                        onClick={() => updateStatus(item.id, "approved")}
-                        style={actionButtonStyle}
-                      >
+                          onClick={() => updateStatus(item.id, "pending")}
+                          style={actionButtonStyle}
+                     >
+                       Save Quote
+                       </button>
+
+                       <button
+                         onClick={() => updateStatus(item.id, "approved")}
+                         style={actionButtonStyle}
+  >
                         Approve
                       </button>
 
                       <button
-                        onClick={() => updateStatus(item.id, "in_progress")}
-                        style={actionButtonStyle}
-                      >
+                          onClick={() => updateStatus(item.id, "in_progress")}
+                          style={actionButtonStyle}
+                        >
                         Start Job
-                      </button>
+                        </button>
 
-                      <button
-                        onClick={() => updateStatus(item.id, "completed")}
-                        style={completeButtonStyle}
-                      >
-                        Complete
-                      </button>
-                    </div>
+                        <button
+                           onClick={() => updateStatus(item.id, "completed")}
+                           style={completeButtonStyle}
+                         >
+                         Complete
+                         </button>
+                     </div>
                   </div>
                 )}
               </div>
@@ -750,4 +725,14 @@ const emptyStyle: CSSProperties = {
   border: "1px solid #e0e0e0",
   color: "#666",
   fontWeight: 700,
+};
+
+const invoiceButtonStyle: React.CSSProperties = {
+  background: "#111",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: 800,
 };

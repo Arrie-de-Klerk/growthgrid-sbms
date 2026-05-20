@@ -80,7 +80,20 @@ setLoading(false);
     <div className="centered">
       <div className="auth-card">
         <h1>GrowthGrid</h1>
-        <p className="muted">Login</p>
+
+      <p
+        className="muted"
+        style={{
+          marginTop: -6,
+          marginBottom: 14,
+          fontWeight: 700,
+          letterSpacing: 0.3,
+       }}
+       >
+          Smart Business Management Systems
+       </p>
+
+       <p className="muted">Login</p>
 
         <form onSubmit={handleLogin} className="auth-form">
           <input
@@ -105,8 +118,12 @@ setLoading(false);
           </button>
 
           <p className="muted" style={{ marginTop: 10 }}>
-            No account? <Link to="/register">Register</Link>
-          </p>
+             No account? <Link to="/register">Register</Link>
+         </p>
+
+         <p className="muted" style={{ marginTop: 8 }}>
+           Forgot password? <Link to="/reset-password">Reset password</Link>
+         </p>
         </form>
       </div>
     </div>

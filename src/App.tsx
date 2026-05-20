@@ -61,6 +61,8 @@ import ClerkSales from "./modules/gas/pages/ClerkSales";
 import ClerkInstallations from "./modules/gas/pages/ClerkInstallations";
 import GasInvoicePrint from "./modules/gas/pages/GasInvoicePrint";
 import GasSalesInvoicePrint from "./modules/gas/pages/GasSalesInvoicePrint";
+import GasInstallationInvoicePrint from "./modules/gas/pages/GasInstallationInvoicePrint";
+import GasInstallationQuotePrint from "./modules/gas/pages/GasInstallationQuotePrint";
 
 export default function App() {
   return (
@@ -97,6 +99,10 @@ export default function App() {
         <Route path="/gas/customers/:id" element={<OwnerCustomerDetail />} />
         <Route path="/gas/installations" element={<OwnerInstallations />} />
         <Route path="/gas/installations/:id" element={<OwnerInstallationsDetail />} />
+        <Route path="/gas/installations/invoice/:installationId" element={<GasInstallationInvoicePrint />} />
+        <Route path="/gas/installations/:id" element={<OwnerInstallationsDetail />} />
+        <Route path="/gas/installations/quote/:installationId" element={<GasInstallationQuotePrint />}
+/>
 
         {/* MOTOR OWNER */}
         <Route path="/motor" element={<OwnerMotorDashboard />} />
