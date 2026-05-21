@@ -160,22 +160,42 @@ export default function OwnerMoney() {
       const vehicleIds = vehicles?.map((v: any) => v.id) || [];
 
       if (vehicleIds.length > 0) {
-        const { data: transportData, error: transportError } = await supabase
-          .from("vehicle_expenses")
-          .select("cost, expense_date, created_at, vehicle_id")
-          .in("vehicle_id", vehicleIds)
-          .gte("expense_date", monthStart)
-          .lt("expense_date", monthEnd);
 
-        if (transportError) throw transportError;
+        // 1. Maintenance / repairs / service expenses
+        const { data: transportExpenses, error: transportExpenseError } =
+          await supabase
+            .from("vehicle_expenses")
+            .select("cost, expense_date, created_at, vehicle_id")
+            .in("vehicle_id", vehicleIds)
+            .gte("expense_date", monthStart)
+            .lt("expense_date", monthEnd);
 
-        transportTotal =
-          transportData?.reduce(
+        if (transportExpenseError) throw transportExpenseError;
+
+        const maintenanceTotal =
+          transportExpenses?.reduce(
             (sum: number, item: any) => sum + Number(item.cost || 0),
             0
           ) || 0;
-      }
 
+        // 2. Fuel costs from daily vehicle logs
+        const { data: vehicleLogs, error: vehicleLogsError } = await supabase
+          .from("vehicle_logs")
+          .select("fuel_amount, created_at, vehicle_id")
+          .in("vehicle_id", vehicleIds)
+          .gte("created_at", monthStart)
+          .lt("created_at", monthEnd);
+
+        if (vehicleLogsError) throw vehicleLogsError;
+
+        const fuelTotal =
+          vehicleLogs?.reduce(
+            (sum: number, log: any) => sum + Number(log.fuel_amount || 0),
+            0
+          ) || 0;
+
+        transportTotal = maintenanceTotal + fuelTotal;
+      }
       setMoneyData({
         gasIncome: gasTotal,
         installIncome: installTotal,

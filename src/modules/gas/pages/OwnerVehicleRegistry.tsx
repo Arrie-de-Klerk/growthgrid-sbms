@@ -222,13 +222,11 @@ export default function OwnerVehicleRegistry() {
                   <div style={vehicleHeaderInnerStyle}>
                     <div>
                       <div style={vehicleCodeStyle}>
-                        🚗 {v.vehicle_code || v.registration || "Vehicle"}
+                         🚗 {v.registration || "No Registration"}
                       </div>
 
                       <div style={vehicleSubStyle}>
-                        {v.registration || "No Registration"} —{" "}
-                        {[v.make, v.model].filter(Boolean).join(" ") ||
-                          "No make/model"}
+                         {[v.make, v.model].filter(Boolean).join(" ") || "No make/model"}
                       </div>
 
                       <div style={statusLineStyle}>
