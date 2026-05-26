@@ -69,7 +69,17 @@ export default function GasInstallationInvoicePrint() {
 
       const { data: installationData, error: installationError } = await supabase
         .from("installations")
-        .select("*")
+        .select(`
+          *,
+          customers (
+            name,
+            phone,
+            email,
+            address_line_1,
+            address_line_2,
+            area
+          )
+        `)
         .eq("id", installationId)
         .eq("business_id", profile.business_id)
         .single();
@@ -159,6 +169,38 @@ export default function GasInstallationInvoicePrint() {
     0
   );
 
+  const linkedCustomer = Array.isArray(installation?.customers)
+  ? installation?.customers[0]
+  : installation?.customers;
+
+const customerName =
+  linkedCustomer?.name ||
+  installation?.customer_name ||
+  installation?.client_name ||
+  installation?.name ||
+  "-";
+
+const customerPhone =
+  linkedCustomer?.phone ||
+  installation?.phone ||
+  "-";
+
+const customerEmail =
+  linkedCustomer?.email ||
+  installation?.email ||
+  "-";
+
+const customerAddress =
+  [
+    linkedCustomer?.address_line_1 ||
+      installation?.address ||
+      installation?.installation_address,
+    linkedCustomer?.address_line_2,
+    linkedCustomer?.area,
+  ]
+    .filter(Boolean)
+    .join(", ") || "-";
+
   if (loading) {
     return <div style={{ padding: 40 }}>Loading installation invoice...</div>;
   }
@@ -225,22 +267,23 @@ export default function GasInstallationInvoicePrint() {
         <hr style={hrStyle} />
 
         <div style={sectionGridStyle}>
-          <div>
-            <h3>Customer</h3>
+         
+          <h3>Customer</h3>
+
             <p style={infoLineStyle}>
-              <strong>Name:</strong>{" "}
-              {text(
-                installation.customer_name ||
-                  installation.client_name ||
-                  installation.name
-              )}
+              <strong>Name:</strong> {customerName}
             </p>
+
             <p style={infoLineStyle}>
-              <strong>Phone:</strong> {text(installation.phone)}
+              <strong>Phone:</strong> {customerPhone}
             </p>
+
             <p style={infoLineStyle}>
-              <strong>Address:</strong>{" "}
-              {text(installation.address || installation.installation_address)}
+              <strong>Email:</strong> {customerEmail}
+            </p>
+
+            <p style={infoLineStyle}>
+              <strong>Address:</strong> {customerAddress}
             </p>
           </div>
 
@@ -312,8 +355,7 @@ export default function GasInstallationInvoicePrint() {
           </p>
         </div>
       </div>
-    </div>
-  );
+    );
 }
 
 const pageStyle: React.CSSProperties = {

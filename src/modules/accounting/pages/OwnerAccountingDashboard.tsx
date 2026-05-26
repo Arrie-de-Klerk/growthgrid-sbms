@@ -155,11 +155,11 @@ function OwnerAccountingDashboard() {
         />
 
         <DashboardCard
-          title="Monthly Work"
-          text="Bookkeeping, VAT, payroll and tax deadlines."
-          button="Coming Soon"
-          to="/accounting"
-        />
+         title="Monthly Work"
+         text="Bookkeeping, VAT, payroll and tax deadlines."
+         button="Open Monthly Work"
+         to="/accounting/monthly-work"
+       />
 
         <DashboardCard
           title="Documents"

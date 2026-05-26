@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../shared/lib/supabase";
 
@@ -16,6 +17,8 @@ type AccountingClient = {
 
 function AccountingClients() {
   const [clients, setClients] = useState<AccountingClient[]>([]);
+  const [search, setSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -24,7 +27,9 @@ function AccountingClients() {
       setLoading(true);
       setError("");
 
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
 
       if (!userData.user) {
         setError("You are not signed in.");
@@ -33,16 +38,23 @@ function AccountingClients() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("business_id")
+        .select("business_id, business_type")
         .eq("id", userData.user.id)
         .single();
 
-      if (profileError || !profile?.business_id) {
+      if (profileError) throw profileError;
+
+      if (!profile?.business_id) {
         setError("Profile or business not found.");
         return;
       }
 
-      const { data, error } = await supabase
+      if (profile.business_type !== "accounting") {
+        setError("This page is only for Accounting businesses.");
+        return;
+      }
+
+      const { data, error: clientsError } = await supabase
         .from("accounting_clients")
         .select(
           "id, client_name, business_name, phone, email, is_vat_registered, is_paye_registered, has_payroll, status"
@@ -50,13 +62,12 @@ function AccountingClients() {
         .eq("business_id", profile.business_id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error(error);
-        setError("Could not load accounting clients.");
-        return;
-      }
+      if (clientsError) throw clientsError;
 
-      setClients(data ?? []);
+      setClients((data ?? []) as AccountingClient[]);
+    } catch (err) {
+      console.error(err);
+      setError("Could not load accounting clients.");
     } finally {
       setLoading(false);
     }
@@ -66,90 +77,287 @@ function AccountingClients() {
     loadClients();
   }, []);
 
+  const filteredClients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return clients;
+
+    return clients.filter((client) => {
+      return [
+        client.client_name,
+        client.business_name,
+        client.phone,
+        client.email,
+        client.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term));
+    });
+  }, [clients, search]);
+
+  const summary = useMemo(() => {
+    return {
+      total: clients.length,
+      active: clients.filter((client) => client.status === "active").length,
+      vat: clients.filter((client) => client.is_vat_registered).length,
+      paye: clients.filter((client) => client.is_paye_registered).length,
+      payroll: clients.filter((client) => client.has_payroll).length,
+    };
+  }, [clients]);
+
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Accounting Clients</h1>
-      <p>Clients linked to this Accounting business.</p>
+    <div style={pageStyle}>
+      <header style={headerStyle}>
+        <div>
+          <h1 style={titleStyle}>Accounting Clients</h1>
+          <p style={subtitleStyle}>
+            View, search and manage clients linked to this Accounting business.
+          </p>
+        </div>
 
-      <div style={{ marginTop: 20, marginBottom: 20 }}>
-        <Link to="/accounting">
-          <button style={secondaryButtonStyle}>Back to Dashboard</button>
-        </Link>
+        <div style={buttonRowStyle}>
+          <Link to="/accounting">
+            <button type="button" style={secondaryButtonStyle}>
+              Back to Dashboard
+            </button>
+          </Link>
 
-        <Link to="/accounting/clients/new" style={{ marginLeft: 12 }}>
-          <button style={buttonStyle}>Add New Client</button>
-        </Link>
-      </div>
+          <Link to="/accounting/clients/new">
+            <button type="button" style={buttonStyle}>
+              Add New Client
+            </button>
+          </Link>
+        </div>
+      </header>
 
-      {loading && <p>Loading clients...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <section style={summaryGridStyle}>
+        <SummaryBox label="Total Clients" value={summary.total.toString()} />
+        <SummaryBox label="Active" value={summary.active.toString()} />
+        <SummaryBox label="VAT" value={summary.vat.toString()} />
+        <SummaryBox label="PAYE" value={summary.paye.toString()} />
+        <SummaryBox label="Payroll" value={summary.payroll.toString()} />
+      </section>
 
-      {!loading && clients.length === 0 && (
+      <section style={toolbarStyle}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search client, business, phone, email, status..."
+          style={searchStyle}
+        />
+
+        <button type="button" onClick={loadClients} style={refreshButtonStyle}>
+          Refresh
+        </button>
+      </section>
+
+      {loading && <div style={infoStyle}>Loading clients...</div>}
+
+      {error && <div style={errorStyle}>⚠️ {error}</div>}
+
+      {!loading && !error && clients.length === 0 && (
         <div style={emptyStyle}>No accounting clients captured yet.</div>
       )}
 
-      {clients.length > 0 && (
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Client</th>
-              <th style={thStyle}>Business</th>
-              <th style={thStyle}>Phone</th>
-              <th style={thStyle}>VAT</th>
-              <th style={thStyle}>Payroll</th>
-              <th style={thStyle}>Status</th>
-              <th style={thStyle}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((client) => (
-              <tr key={client.id}>
-                <td style={tdStyle}>{client.client_name}</td>
-                <td style={tdStyle}>{client.business_name || "-"}</td>
-                <td style={tdStyle}>{client.phone || "-"}</td>
-                <td style={tdStyle}>{client.is_vat_registered ? "Yes" : "No"}</td>
-                <td style={tdStyle}>{client.has_payroll ? "Yes" : "No"}</td>
-                <td style={tdStyle}>{client.status}</td>
-                <td style={tdStyle}>
-                  <Link to={`/accounting/clients/${client.id}`}>Open</Link>
-                </td>
+      {!loading && !error && clients.length > 0 && filteredClients.length === 0 && (
+        <div style={emptyStyle}>No clients match your search.</div>
+      )}
+
+      {!loading && !error && filteredClients.length > 0 && (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Client</th>
+                <th style={thStyle}>Business</th>
+                <th style={thStyle}>Phone</th>
+                <th style={thStyle}>Email</th>
+                <th style={thStyle}>VAT</th>
+                <th style={thStyle}>PAYE</th>
+                <th style={thStyle}>Payroll</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody>
+              {filteredClients.map((client) => (
+                <tr key={client.id}>
+                  <td style={tdStyle}>{client.client_name}</td>
+                  <td style={tdStyle}>{client.business_name || "-"}</td>
+                  <td style={tdStyle}>{client.phone || "-"}</td>
+                  <td style={tdStyle}>{client.email || "-"}</td>
+                  <td style={tdStyle}>
+                    {client.is_vat_registered ? "Yes" : "No"}
+                  </td>
+                  <td style={tdStyle}>
+                    {client.is_paye_registered ? "Yes" : "No"}
+                  </td>
+                  <td style={tdStyle}>{client.has_payroll ? "Yes" : "No"}</td>
+                  <td style={tdStyle}>
+                    <span style={statusPillStyle}>{client.status}</span>
+                  </td>
+                  <td style={tdStyle}>
+                    <Link to={`/accounting/clients/${client.id}`}>
+                      <button type="button" style={smallButtonStyle}>
+                        Open
+                      </button>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
-const tableStyle: React.CSSProperties = {
+function SummaryBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={summaryBoxStyle}>
+      <div style={summaryValueStyle}>{value}</div>
+      <div style={summaryLabelStyle}>{label}</div>
+    </div>
+  );
+}
+
+const pageStyle: CSSProperties = {
+  padding: 40,
+  maxWidth: 1400,
+  margin: "0 auto",
+};
+
+const headerStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+  marginBottom: 30,
+};
+
+const titleStyle: CSSProperties = {
+  fontSize: 42,
+  margin: 0,
+};
+
+const subtitleStyle: CSSProperties = {
+  fontSize: 18,
+  color: "#555",
+  marginTop: 8,
+};
+
+const buttonRowStyle: CSSProperties = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summaryGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 16,
+  marginBottom: 24,
+};
+
+const summaryBoxStyle: CSSProperties = {
+  padding: 20,
+  borderRadius: 14,
+  background: "white",
+  border: "1px solid #ddd",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.05)",
+};
+
+const summaryValueStyle: CSSProperties = {
+  fontSize: 30,
+  fontWeight: 900,
+};
+
+const summaryLabelStyle: CSSProperties = {
+  color: "#555",
+  marginTop: 6,
+  fontWeight: 700,
+};
+
+const toolbarStyle: CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  marginBottom: 20,
+};
+
+const searchStyle: CSSProperties = {
+  flex: 1,
+  padding: 13,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  fontSize: 16,
+};
+
+const tableWrapStyle: CSSProperties = {
+  overflowX: "auto",
+};
+
+const tableStyle: CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
   marginTop: 20,
   background: "white",
   border: "1px solid #ddd",
+  borderRadius: 12,
+  overflow: "hidden",
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle: CSSProperties = {
   textAlign: "left",
   padding: 12,
   background: "#f2f2f2",
   borderBottom: "1px solid #ddd",
+  whiteSpace: "nowrap",
 };
 
-const tdStyle: React.CSSProperties = {
+const tdStyle: CSSProperties = {
   padding: 12,
   borderBottom: "1px solid #eee",
+  whiteSpace: "nowrap",
 };
 
-const emptyStyle: React.CSSProperties = {
+const statusPillStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "5px 10px",
+  borderRadius: 999,
+  background: "#e8f5e9",
+  color: "#166534",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  fontSize: 12,
+};
+
+const emptyStyle: CSSProperties = {
   marginTop: 20,
-  padding: 20,
+  padding: 24,
   border: "1px solid #ddd",
   borderRadius: 12,
+  background: "white",
 };
 
-const buttonStyle: React.CSSProperties = {
+const infoStyle: CSSProperties = {
+  padding: 18,
+  borderRadius: 10,
+  background: "#f3f4f6",
+  fontWeight: 700,
+};
+
+const errorStyle: CSSProperties = {
+  padding: 18,
+  borderRadius: 10,
+  background: "#fee2e2",
+  color: "#991b1b",
+  fontWeight: 700,
+};
+
+const buttonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: 8,
   border: "none",
@@ -159,9 +367,26 @@ const buttonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const secondaryButtonStyle: React.CSSProperties = {
+const secondaryButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  background: "white",
+  color: "black",
+  border: "1px solid #ddd",
+};
+
+const refreshButtonStyle: CSSProperties = {
   ...buttonStyle,
   background: "#666",
+};
+
+const smallButtonStyle: CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 8,
+  border: "none",
+  background: "black",
+  color: "white",
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 export default AccountingClients;

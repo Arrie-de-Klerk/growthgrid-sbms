@@ -81,7 +81,7 @@ export default function ClerkNewOrder() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("business_id")
+        .select("business_id, business_type, role")
         .eq("id", session.user.id)
         .single();
 
@@ -91,7 +91,11 @@ export default function ClerkNewOrder() {
         throw new Error("This clerk is not linked to a business yet.");
       }
 
-      setBusinessId(profile.business_id);
+      if (profile.business_type !== "gas") {
+        throw new Error("This page is only for Gas businesses.");
+      }
+
+       setBusinessId(profile.business_id);
 
       const { data: business } = await supabase
         .from("businesses")
@@ -196,6 +200,14 @@ export default function ClerkNewOrder() {
       }
 
       const cleanPhone = phone.trim();
+      const cleanEmail = email.trim();
+      const mappedInstallationType = installationTypeMap[quoteType];
+
+        if (mappedInstallationType && !cleanEmail) {
+        throw new Error("Please enter the customer's email address for installation quotes and invoices.");
+      }
+
+       console.log("EMAIL BEFORE CUSTOMER SAVE:", cleanEmail);
 
       const { data: existingCustomer, error: existingCustomerError } =
         await supabase
@@ -212,6 +224,7 @@ export default function ClerkNewOrder() {
       if (!existingCustomer) {
         const customerCode = await generateCustomerCode(businessId);
 
+        // create new customer with email
         const { data: newCustomer, error: customerError } = await supabase
           .from("customers")
           .insert({
@@ -221,6 +234,7 @@ export default function ClerkNewOrder() {
               contactName.trim() !== "" ? "business" : "residential",
             name: customerName.trim(),
             phone: cleanPhone,
+            email: cleanEmail || null,
             address_line_1: address.trim(),
             area: area.trim(),
             is_active: true,
@@ -230,40 +244,59 @@ export default function ClerkNewOrder() {
 
         if (customerError) throw customerError;
 
+        if (!newCustomer?.id) {
+          throw new Error("Customer could not be created.");
+        }
+
         customerId = newCustomer.id;
       } else {
-        customerId = existingCustomer.id;
-
+        // update existing customer with email
         const { error: updateCustomerError } = await supabase
           .from("customers")
           .update({
             name: customerName.trim(),
+            phone: cleanPhone,
+            email: cleanEmail || null,
             address_line_1: address.trim(),
             area: area.trim(),
             is_active: true,
           })
-          .eq("id", customerId)
+          .eq("id", existingCustomer.id)
           .eq("business_id", businessId);
 
         if (updateCustomerError) throw updateCustomerError;
+
+        customerId = existingCustomer.id;
       }
+      
 
-      const mappedInstallationType = installationTypeMap[quoteType];
+         if (mappedInstallationType && !email.trim()) {
+           alert("Please enter the customer's email address for installation quotes and invoices.");
+           setLoading(false);
+           return;
+       }
 
-      if (mappedInstallationType) {
-        const { error: instErr } = await supabase.from("installations").insert({
-          business_id: businessId,
-          customer_id: customerId,
-          installation_type: mappedInstallationType,
-          status: "planned",
-          address: address.trim(),
-          notes:
-            quoteType === "Other"
+         if (mappedInstallationType) {
+      const { error: instErr } = await supabase.from("installations").insert({
+             business_id: businessId,
+             customer_id: customerId,
+             installation_type: mappedInstallationType,
+             status: "planned",
+             address: address.trim(),
+             notes:
+          quoteType === "Other"
               ? otherDescription.trim()
               : otherDescription.trim() || null,
-        });
+           });
 
-        if (instErr) throw instErr;
+       if (instErr) throw instErr;
+       }
+
+
+      if (!isGasOrder) {
+        alert("Installation request saved.");
+        navigate("/gas/clerk/installations");
+        return;
       }
 
       const invoiceNumber = await generateInvoiceNumber(businessId);
@@ -294,7 +327,7 @@ export default function ClerkNewOrder() {
             quoteType === "Other" ? otherDescription.trim() : null,
 
           phone: cleanPhone,
-          email: email.trim() || null,
+          email: cleanEmail || null,
           address: address.trim(),
           area: area.trim(),
         })
@@ -375,10 +408,11 @@ export default function ClerkNewOrder() {
             <label style={labelStyle}>
               Email
               <input
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={inputStyle}
+                 type="email"
+                 placeholder="Email"
+                 value={email}
+                 onChange={(e) => setEmail(e.target.value)}
+                 style={inputStyle}
               />
             </label>
 
@@ -505,8 +539,12 @@ export default function ClerkNewOrder() {
         </section>
 
         <button type="submit" disabled={loading} style={submitButtonStyle}>
-          {loading ? "Saving..." : "Save & Print Invoice"}
-        </button>
+         {loading
+           ? "Saving..."
+           : isGasOrder
+           ? "Save & Print Invoice"
+           : "Save Installation Request"}
+       </button>
       </form>
     </div>
   );
