@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../shared/lib/supabase";
 
 type AccountingClient = {
@@ -21,6 +21,10 @@ function AccountingClients() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchParams] = useSearchParams();
+
+  const statusFilter = searchParams.get("status");
+  const serviceFilter = searchParams.get("service");
 
   async function loadClients() {
     try {
@@ -78,12 +82,12 @@ function AccountingClients() {
   }, []);
 
   const filteredClients = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  const term = search.trim().toLowerCase();
 
-    if (!term) return clients;
-
-    return clients.filter((client) => {
-      return [
+  return clients.filter((client) => {
+    const matchesSearch =
+      !term ||
+      [
         client.client_name,
         client.business_name,
         client.phone,
@@ -92,8 +96,19 @@ function AccountingClients() {
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
-    });
-  }, [clients, search]);
+
+    const matchesStatus =
+      !statusFilter || client.status === statusFilter;
+
+    const matchesService =
+      !serviceFilter ||
+      (serviceFilter === "vat" && client.is_vat_registered) ||
+      (serviceFilter === "paye" && client.is_paye_registered) ||
+      (serviceFilter === "payroll" && client.has_payroll);
+
+    return matchesSearch && matchesStatus && matchesService;
+  });
+}, [clients, search, statusFilter, serviceFilter]);
 
   const summary = useMemo(() => {
     return {

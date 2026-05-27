@@ -133,10 +133,29 @@ function OwnerAccountingDashboard() {
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       <div style={gridStyle}>
-        <StatCard title="Total Clients" value={stats.totalClients} />
-        <StatCard title="Active Clients" value={stats.activeClients} />
-        <StatCard title="VAT Clients" value={stats.vatClients} />
-        <StatCard title="Payroll Clients" value={stats.payrollClients} />
+        <StatCard
+           title="Total Clients"
+           value={stats.totalClients}
+           to="/accounting/clients"
+       />
+
+        <StatCard
+          title="Active Clients"
+          value={stats.activeClients}
+          to="/accounting/clients?status=active"
+       />
+
+        <StatCard
+          title="VAT Clients"
+          value={stats.vatClients}
+          to="/accounting/clients?service=vat"
+        />
+
+        <StatCard
+          title="Payroll Clients"
+          value={stats.payrollClients}
+          to="/accounting/clients?service=payroll"
+        /> 
       </div>
 
       <div style={cardGridStyle}>
@@ -164,20 +183,36 @@ function OwnerAccountingDashboard() {
         <DashboardCard
           title="Documents"
           text="Track documents still needed from clients."
-          button="Coming Soon"
-          to="/accounting"
-        />
+          button="Open Documents"
+          to="/accounting/documents"
+       />
       </div>
     </div>
   );
 }
 
-function StatCard({ title, value }: { title: string; value: number }) {
-  return (
+function StatCard({
+  title,
+  value,
+  to,
+}: {
+  title: string;
+  value: number;
+  to?: string;
+}) {
+  const content = (
     <div style={statCardStyle}>
-      <h3>{title}</h3>
-      <h1>{value}</h1>
+      <h2>{title}</h2>
+      <p>{value}</p>
     </div>
+  );
+
+  if (!to) return content;
+
+  return (
+    <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
+      {content}
+    </Link>
   );
 }
 

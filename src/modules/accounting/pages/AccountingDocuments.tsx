@@ -3,14 +3,14 @@ import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../shared/lib/supabase";
 
-type TaskType = "bookkeeping" | "vat" | "paye" | "payroll" | "tax";
+type DocumentType =
+  | "bank_statements"
+  | "invoices_receipts"
+  | "vat_documents"
+  | "payroll_documents"
+  | "tax_documents";
 
-type TaskStatus =
-  | "not_started"
-  | "in_progress"
-  | "waiting_documents"
-  | "completed"
-  | "submitted";
+type DocumentStatus = "needed" | "requested" | "received" | "filed";
 
 type AccountingClient = {
   id: string;
@@ -26,49 +26,54 @@ type AccountingClient = {
   status: string;
 };
 
-type AccountingMonthlyTask = {
+type AccountingDocumentTask = {
   id: string;
   business_id: string;
   client_id: string;
   month_start: string;
-  task_type: TaskType;
-  status: TaskStatus;
-  due_date: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  submitted_at: string | null;
+  document_type: DocumentType;
+  status: DocumentStatus;
+  requested_at: string | null;
+  received_at: string | null;
+  filed_at: string | null;
   notes: string | null;
 };
 
-type WorkRow = {
+type DocumentRow = {
   client: AccountingClient;
-  tasks: Partial<Record<TaskType, AccountingMonthlyTask>>;
+  documents: Partial<Record<DocumentType, AccountingDocumentTask>>;
 };
 
-const TASK_TYPES: TaskType[] = ["bookkeeping", "vat", "paye", "payroll", "tax"];
+const DOCUMENT_TYPES: DocumentType[] = [
+  "bank_statements",
+  "invoices_receipts",
+  "vat_documents",
+  "payroll_documents",
+  "tax_documents",
+];
 
-function AccountingMonthlyWork() {
-  const [businessId, setBusinessId] = useState<string | null>(null);
+export default function AccountingDocuments() {
   const [clients, setClients] = useState<AccountingClient[]>([]);
-  const [tasks, setTasks] = useState<AccountingMonthlyTask[]>([]);
+  const [documents, setDocuments] = useState<AccountingDocumentTask[]>([]);
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<
-    "all" | "not_started" | "in_progress" | "waiting_documents" | "completed" | "submitted"
+    "all" | "needed" | "requested" | "received" | "filed"
   >("all");
 
   const [loading, setLoading] = useState(true);
-  const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
+  const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const monthStart = getMonthStart();
 
-  async function loadMonthlyWork() {
+  async function loadDocuments() {
     try {
       setLoading(true);
       setError("");
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
 
       if (userError) throw userError;
 
@@ -95,8 +100,6 @@ function AccountingMonthlyWork() {
         return;
       }
 
-      setBusinessId(profile.business_id);
-
       const { data: clientData, error: clientsError } = await supabase
         .from("accounting_clients")
         .select(
@@ -110,133 +113,136 @@ function AccountingMonthlyWork() {
       const loadedClients = (clientData ?? []) as AccountingClient[];
       setClients(loadedClients);
 
-      await createMissingTasks(profile.business_id, loadedClients);
+      await createMissingDocumentTasks(profile.business_id, loadedClients);
 
-      const { data: taskData, error: tasksError } = await supabase
-        .from("accounting_monthly_tasks")
+      const { data: documentData, error: documentsError } = await supabase
+        .from("accounting_document_tasks")
         .select("*")
         .eq("business_id", profile.business_id)
         .eq("month_start", monthStart);
 
-      if (tasksError) throw tasksError;
+      if (documentsError) throw documentsError;
 
-      setTasks((taskData ?? []) as AccountingMonthlyTask[]);
+      setDocuments((documentData ?? []) as AccountingDocumentTask[]);
     } catch (err) {
       console.error(err);
-      setError("Could not load monthly work.");
+      setError("Could not load accounting documents.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function createMissingTasks(
+  async function createMissingDocumentTasks(
     activeBusinessId: string,
     activeClients: AccountingClient[]
   ) {
     const rowsToCreate = activeClients.flatMap((client) => {
-      const requiredTasks = getRequiredTaskTypes(client);
+      const requiredDocuments = getRequiredDocumentTypes(client);
 
-      return requiredTasks.map((taskType) => ({
+      return requiredDocuments.map((documentType) => ({
         business_id: activeBusinessId,
         client_id: client.id,
         month_start: monthStart,
-        task_type: taskType,
-        status: "not_started" as TaskStatus,
+        document_type: documentType,
+        status: "needed" as DocumentStatus,
       }));
     });
 
     if (rowsToCreate.length === 0) return;
 
     const { error: upsertError } = await supabase
-      .from("accounting_monthly_tasks")
+      .from("accounting_document_tasks")
       .upsert(rowsToCreate, {
-        onConflict: "business_id,client_id,month_start,task_type",
+        onConflict: "business_id,client_id,month_start,document_type",
         ignoreDuplicates: true,
       });
 
     if (upsertError) throw upsertError;
   }
 
-  async function updateTaskStatus(
-    task: AccountingMonthlyTask,
-    nextStatus: TaskStatus
+  async function updateDocumentStatus(
+    document: AccountingDocumentTask,
+    nextStatus: DocumentStatus
   ) {
     try {
-      setSavingTaskId(task.id);
+      setSavingDocumentId(document.id);
       setError("");
 
       const now = new Date().toISOString();
 
-      const updatePayload: Partial<AccountingMonthlyTask> = {
+      const updatePayload: Partial<AccountingDocumentTask> = {
         status: nextStatus,
       };
 
-      if (nextStatus === "in_progress" && !task.started_at) {
-        updatePayload.started_at = now;
+      if (nextStatus === "requested" && !document.requested_at) {
+        updatePayload.requested_at = now;
       }
 
-      if (nextStatus === "completed") {
-        updatePayload.completed_at = now;
+      if (nextStatus === "received") {
+        updatePayload.received_at = now;
 
-        if (!task.started_at) {
-          updatePayload.started_at = now;
+        if (!document.requested_at) {
+          updatePayload.requested_at = now;
         }
       }
 
-      if (nextStatus === "submitted") {
-        updatePayload.submitted_at = now;
+      if (nextStatus === "filed") {
+        updatePayload.filed_at = now;
 
-        if (!task.completed_at) {
-          updatePayload.completed_at = now;
+        if (!document.received_at) {
+          updatePayload.received_at = now;
         }
 
-        if (!task.started_at) {
-          updatePayload.started_at = now;
+        if (!document.requested_at) {
+          updatePayload.requested_at = now;
         }
       }
 
-      if (nextStatus === "not_started") {
-        updatePayload.started_at = null;
-        updatePayload.completed_at = null;
-        updatePayload.submitted_at = null;
+      if (nextStatus === "needed") {
+        updatePayload.requested_at = null;
+        updatePayload.received_at = null;
+        updatePayload.filed_at = null;
       }
 
       const { error: updateError } = await supabase
-        .from("accounting_monthly_tasks")
+        .from("accounting_document_tasks")
         .update(updatePayload)
-        .eq("id", task.id);
+        .eq("id", document.id);
 
       if (updateError) throw updateError;
 
-      await loadMonthlyWork();
+      await loadDocuments();
     } catch (err) {
       console.error(err);
-      setError("Could not update task.");
+      setError("Could not update document status.");
     } finally {
-      setSavingTaskId(null);
+      setSavingDocumentId(null);
     }
   }
 
   useEffect(() => {
-    loadMonthlyWork();
+    loadDocuments();
   }, []);
 
-  const rows = useMemo<WorkRow[]>(() => {
+  const rows = useMemo<DocumentRow[]>(() => {
     return clients.map((client) => {
-      const clientTasks = tasks.filter((task) => task.client_id === client.id);
+      const clientDocuments = documents.filter(
+        (document) => document.client_id === client.id
+      );
 
-      const taskMap: Partial<Record<TaskType, AccountingMonthlyTask>> = {};
+      const documentMap: Partial<Record<DocumentType, AccountingDocumentTask>> =
+        {};
 
-      clientTasks.forEach((task) => {
-        taskMap[task.task_type] = task;
+      clientDocuments.forEach((document) => {
+        documentMap[document.document_type] = document;
       });
 
       return {
         client,
-        tasks: taskMap,
+        documents: documentMap,
       };
     });
-  }, [clients, tasks]);
+  }, [clients, documents]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -257,25 +263,26 @@ function AccountingMonthlyWork() {
 
       const matchesFilter =
         filter === "all" ||
-        Object.values(row.tasks).some((task) => task?.status === filter);
+        Object.values(row.documents).some(
+          (document) => document?.status === filter
+        );
 
       return matchesSearch && matchesFilter;
     });
   }, [rows, search, filter]);
 
   const summary = useMemo(() => {
-    const allTasks = tasks;
-
     return {
       totalClients: clients.length,
-      notStarted: allTasks.filter((task) => task.status === "not_started").length,
-      inProgress: allTasks.filter((task) => task.status === "in_progress").length,
-      waitingDocs: allTasks.filter((task) => task.status === "waiting_documents")
+      needed: documents.filter((document) => document.status === "needed")
         .length,
-      completed: allTasks.filter((task) => task.status === "completed").length,
-      submitted: allTasks.filter((task) => task.status === "submitted").length,
+      requested: documents.filter((document) => document.status === "requested")
+        .length,
+      received: documents.filter((document) => document.status === "received")
+        .length,
+      filed: documents.filter((document) => document.status === "filed").length,
     };
-  }, [clients, tasks]);
+  }, [clients, documents]);
 
   const monthLabel = new Date().toLocaleDateString("en-ZA", {
     month: "long",
@@ -286,10 +293,10 @@ function AccountingMonthlyWork() {
     <div style={pageStyle}>
       <header style={headerStyle}>
         <div>
-          <h1 style={titleStyle}>Monthly Work</h1>
+          <h1 style={titleStyle}>Documents</h1>
           <p style={subtitleStyle}>
-            Real monthly work tracker for {monthLabel}: bookkeeping, VAT, PAYE,
-            payroll and tax tasks.
+            Real document tracker for {monthLabel}: bank statements, invoices,
+            receipts, VAT, payroll and tax documents.
           </p>
         </div>
 
@@ -300,9 +307,9 @@ function AccountingMonthlyWork() {
             </button>
           </Link>
 
-          <Link to="/accounting/documents">
+          <Link to="/accounting/monthly-work">
             <button type="button" style={buttonStyle}>
-              Documents
+              Monthly Work
             </button>
           </Link>
         </div>
@@ -310,11 +317,10 @@ function AccountingMonthlyWork() {
 
       <section style={summaryGridStyle}>
         <SummaryBox label="Clients" value={summary.totalClients.toString()} />
-        <SummaryBox label="Not Started" value={summary.notStarted.toString()} />
-        <SummaryBox label="In Progress" value={summary.inProgress.toString()} />
-        <SummaryBox label="Waiting Docs" value={summary.waitingDocs.toString()} />
-        <SummaryBox label="Completed" value={summary.completed.toString()} />
-        <SummaryBox label="Submitted" value={summary.submitted.toString()} />
+        <SummaryBox label="Needed" value={summary.needed.toString()} />
+        <SummaryBox label="Requested" value={summary.requested.toString()} />
+        <SummaryBox label="Received" value={summary.received.toString()} />
+        <SummaryBox label="Filed" value={summary.filed.toString()} />
       </section>
 
       <section style={toolbarStyle}>
@@ -331,29 +337,27 @@ function AccountingMonthlyWork() {
             setFilter(
               e.target.value as
                 | "all"
-                | "not_started"
-                | "in_progress"
-                | "waiting_documents"
-                | "completed"
-                | "submitted"
+                | "needed"
+                | "requested"
+                | "received"
+                | "filed"
             )
           }
           style={selectStyle}
         >
-          <option value="all">All Tasks</option>
-          <option value="not_started">Not Started</option>
-          <option value="in_progress">In Progress</option>
-          <option value="waiting_documents">Waiting Documents</option>
-          <option value="completed">Completed</option>
-          <option value="submitted">Submitted</option>
+          <option value="all">All Documents</option>
+          <option value="needed">Needed</option>
+          <option value="requested">Requested</option>
+          <option value="received">Received</option>
+          <option value="filed">Filed</option>
         </select>
 
-        <button type="button" onClick={loadMonthlyWork} style={refreshButtonStyle}>
+        <button type="button" onClick={loadDocuments} style={refreshButtonStyle}>
           Refresh
         </button>
       </section>
 
-      {loading && <div style={infoStyle}>Loading monthly work...</div>}
+      {loading && <div style={infoStyle}>Loading documents...</div>}
 
       {error && <div style={errorStyle}>⚠️ {error}</div>}
 
@@ -364,7 +368,7 @@ function AccountingMonthlyWork() {
       )}
 
       {!loading && !error && rows.length > 0 && filteredRows.length === 0 && (
-        <div style={emptyStyle}>No monthly work matches your filter.</div>
+        <div style={emptyStyle}>No documents match your filter.</div>
       )}
 
       {!loading && !error && filteredRows.length > 0 && (
@@ -374,9 +378,9 @@ function AccountingMonthlyWork() {
               <tr>
                 <th style={thStyle}>Client</th>
                 <th style={thStyle}>Business</th>
-                <th style={thStyle}>Bookkeeping</th>
+                <th style={thStyle}>Bank Statements</th>
+                <th style={thStyle}>Invoices / Receipts</th>
                 <th style={thStyle}>VAT</th>
-                <th style={thStyle}>PAYE</th>
                 <th style={thStyle}>Payroll</th>
                 <th style={thStyle}>Tax</th>
                 <th style={thStyle}>Assigned</th>
@@ -390,12 +394,12 @@ function AccountingMonthlyWork() {
                   <td style={tdStyle}>{row.client.client_name}</td>
                   <td style={tdStyle}>{row.client.business_name || "-"}</td>
 
-                  {TASK_TYPES.map((taskType) => (
-                    <td key={taskType} style={tdStyle}>
-                      <TaskCell
-                        task={row.tasks[taskType]}
-                        savingTaskId={savingTaskId}
-                        onStatusChange={updateTaskStatus}
+                  {DOCUMENT_TYPES.map((documentType) => (
+                    <td key={documentType} style={tdStyle}>
+                      <DocumentCell
+                        document={row.documents[documentType]}
+                        savingDocumentId={savingDocumentId}
+                        onStatusChange={updateDocumentStatus}
                       />
                     </td>
                   ))}
@@ -417,119 +421,100 @@ function AccountingMonthlyWork() {
       )}
 
       <section style={noteStyle}>
-        <strong>Saved in Supabase:</strong> These task statuses are now real.
-        When you click Start, Waiting Docs, Complete, or Submit, the status and
-        date are stored in the accounting_monthly_tasks table.
+        <strong>Saved in Supabase:</strong> These document statuses are now
+        real. When you click Request, Received, Filed, or Reopen, the status and
+        date are stored in the accounting_document_tasks table.
       </section>
     </div>
   );
 }
 
-function TaskCell({
-  task,
-  savingTaskId,
+function DocumentCell({
+  document,
+  savingDocumentId,
   onStatusChange,
 }: {
-  task: AccountingMonthlyTask | undefined;
-  savingTaskId: string | null;
-  onStatusChange: (task: AccountingMonthlyTask, nextStatus: TaskStatus) => void;
+  document: AccountingDocumentTask | undefined;
+  savingDocumentId: string | null;
+  onStatusChange: (
+    document: AccountingDocumentTask,
+    nextStatus: DocumentStatus
+  ) => void;
 }) {
-  if (!task) {
+  if (!document) {
     return <span style={notApplicableStyle}>N/A</span>;
   }
 
-  const isSaving = savingTaskId === task.id;
+  const isSaving = savingDocumentId === document.id;
 
   return (
-    <div style={taskCellStyle}>
-      <StatusBadge status={task.status} />
+    <div style={documentCellStyle}>
+      <DocumentBadge status={document.status} />
 
-      <div style={dateTextStyle}>{getTaskDateText(task)}</div>
+      <div style={dateTextStyle}>{getDocumentDateText(document)}</div>
 
       <div style={miniButtonRowStyle}>
-        {task.status === "not_started" && (
+        {document.status === "needed" && (
           <>
             <button
               type="button"
               style={miniButtonStyle}
               disabled={isSaving}
-              onClick={() => onStatusChange(task, "in_progress")}
+              onClick={() => onStatusChange(document, "requested")}
             >
-              Start
+              Request
             </button>
 
             <button
               type="button"
               style={miniButtonLightStyle}
               disabled={isSaving}
-              onClick={() => onStatusChange(task, "waiting_documents")}
+              onClick={() => onStatusChange(document, "received")}
             >
-              Docs
+              Received
             </button>
           </>
         )}
 
-        {task.status === "in_progress" && (
-          <>
-            <button
-              type="button"
-              style={miniButtonStyle}
-              disabled={isSaving}
-              onClick={() => onStatusChange(task, "completed")}
-            >
-              Complete
-            </button>
-
-            <button
-              type="button"
-              style={miniButtonLightStyle}
-              disabled={isSaving}
-              onClick={() => onStatusChange(task, "waiting_documents")}
-            >
-              Docs
-            </button>
-          </>
-        )}
-
-        {task.status === "waiting_documents" && (
-          <>
-            <button
-              type="button"
-              style={miniButtonStyle}
-              disabled={isSaving}
-              onClick={() => onStatusChange(task, "in_progress")}
-            >
-              Resume
-            </button>
-
-            <button
-              type="button"
-              style={miniButtonLightStyle}
-              disabled={isSaving}
-              onClick={() => onStatusChange(task, "completed")}
-            >
-              Complete
-            </button>
-          </>
-        )}
-
-        {task.status === "completed" && (
+        {document.status === "requested" && (
           <button
             type="button"
             style={miniButtonStyle}
             disabled={isSaving}
-            onClick={() => onStatusChange(task, "submitted")}
+            onClick={() => onStatusChange(document, "received")}
           >
-            Submit
+            Received
           </button>
         )}
 
-        {task.status === "submitted" && (
+        {document.status === "received" && (
+          <>
+            <button
+              type="button"
+              style={miniButtonStyle}
+              disabled={isSaving}
+              onClick={() => onStatusChange(document, "filed")}
+            >
+              Filed
+            </button>
+
+            <button
+              type="button"
+              style={miniButtonLightStyle}
+              disabled={isSaving}
+              onClick={() => onStatusChange(document, "needed")}
+            >
+              Reopen
+            </button>
+          </>
+        )}
+
+        {document.status === "filed" && (
           <button
             type="button"
             style={miniButtonLightStyle}
             disabled={isSaving}
-            onClick={() => onStatusChange(task, "in_progress")}
+            onClick={() => onStatusChange(document, "received")}
           >
             Reopen
           </button>
@@ -539,35 +524,29 @@ function TaskCell({
   );
 }
 
-function StatusBadge({ status }: { status: TaskStatus }) {
-  const label = getStatusLabel(status);
-
-  const styleByStatus: Record<TaskStatus, CSSProperties> = {
-    not_started: {
-      background: "#e0f2fe",
-      color: "#075985",
-    },
-    in_progress: {
-      background: "#fff7ed",
-      color: "#9a3412",
-    },
-    waiting_documents: {
+function DocumentBadge({ status }: { status: DocumentStatus }) {
+  const styleByStatus: Record<DocumentStatus, CSSProperties> = {
+    needed: {
       background: "#fee2e2",
       color: "#991b1b",
     },
-    completed: {
+    requested: {
+      background: "#fff7ed",
+      color: "#9a3412",
+    },
+    received: {
+      background: "#e0f2fe",
+      color: "#075985",
+    },
+    filed: {
       background: "#dcfce7",
       color: "#166534",
-    },
-    submitted: {
-      background: "#ede9fe",
-      color: "#5b21b6",
     },
   };
 
   return (
-    <span style={{ ...statusBadgeStyle, ...styleByStatus[status] }}>
-      {label}
+    <span style={{ ...documentBadgeStyle, ...styleByStatus[status] }}>
+      {getDocumentStatusLabel(status)}
     </span>
   );
 }
@@ -589,49 +568,49 @@ function getMonthStart() {
   return `${year}-${month}-01`;
 }
 
-function getRequiredTaskTypes(client: AccountingClient): TaskType[] {
-  const taskTypes: TaskType[] = ["bookkeeping"];
+function getRequiredDocumentTypes(client: AccountingClient): DocumentType[] {
+  const documentTypes: DocumentType[] = [
+    "bank_statements",
+    "invoices_receipts",
+  ];
 
-  if (client.is_vat_registered) taskTypes.push("vat");
-  if (client.is_paye_registered) taskTypes.push("paye");
-  if (client.has_payroll) taskTypes.push("payroll");
-  if (client.financial_year_end) taskTypes.push("tax");
+  if (client.is_vat_registered) documentTypes.push("vat_documents");
 
-  return taskTypes;
+  if (client.has_payroll || client.is_paye_registered) {
+    documentTypes.push("payroll_documents");
+  }
+
+  if (client.financial_year_end) documentTypes.push("tax_documents");
+
+  return documentTypes;
 }
 
-function getStatusLabel(status: TaskStatus) {
+function getDocumentStatusLabel(status: DocumentStatus) {
   switch (status) {
-    case "not_started":
-      return "Not Started";
-    case "in_progress":
-      return "Started";
-    case "waiting_documents":
-      return "Waiting Docs";
-    case "completed":
-      return "Completed";
-    case "submitted":
-      return "Submitted";
+    case "needed":
+      return "Needed";
+    case "requested":
+      return "Requested";
+    case "received":
+      return "Received";
+    case "filed":
+      return "Filed";
     default:
       return status;
   }
 }
 
-function getTaskDateText(task: AccountingMonthlyTask) {
-  if (task.status === "submitted" && task.submitted_at) {
-    return `Submitted: ${formatDate(task.submitted_at)}`;
+function getDocumentDateText(document: AccountingDocumentTask) {
+  if (document.status === "filed" && document.filed_at) {
+    return `Filed: ${formatDate(document.filed_at)}`;
   }
 
-  if (task.status === "completed" && task.completed_at) {
-    return `Completed: ${formatDate(task.completed_at)}`;
+  if (document.status === "received" && document.received_at) {
+    return `Received: ${formatDate(document.received_at)}`;
   }
 
-  if (task.status === "in_progress" && task.started_at) {
-    return `Started: ${formatDate(task.started_at)}`;
-  }
-
-  if (task.status === "waiting_documents") {
-    return "Waiting for client";
+  if (document.status === "requested" && document.requested_at) {
+    return `Requested: ${formatDate(document.requested_at)}`;
   }
 
   return "";
@@ -755,13 +734,13 @@ const tdStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const taskCellStyle: CSSProperties = {
+const documentCellStyle: CSSProperties = {
   display: "grid",
   gap: 7,
   minWidth: 135,
 };
 
-const statusBadgeStyle: CSSProperties = {
+const documentBadgeStyle: CSSProperties = {
   display: "inline-block",
   padding: "6px 10px",
   borderRadius: 999,
@@ -872,5 +851,3 @@ const smallButtonStyle: CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
-
-export default AccountingMonthlyWork;
