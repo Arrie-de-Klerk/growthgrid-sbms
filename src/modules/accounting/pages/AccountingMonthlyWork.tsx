@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../shared/lib/supabase";
 
 type TaskType = "bookkeeping" | "vat" | "paye" | "payroll" | "tax";
@@ -48,14 +48,42 @@ type WorkRow = {
 const TASK_TYPES: TaskType[] = ["bookkeeping", "vat", "paye", "payroll", "tax"];
 
 function AccountingMonthlyWork() {
-  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+
+  const statusParam = searchParams.get("status");
+  const taskParam = searchParams.get("task");
+
   const [clients, setClients] = useState<AccountingClient[]>([]);
   const [tasks, setTasks] = useState<AccountingMonthlyTask[]>([]);
 
   const [search, setSearch] = useState("");
+
   const [filter, setFilter] = useState<
-    "all" | "not_started" | "in_progress" | "waiting_documents" | "completed" | "submitted"
-  >("all");
+    | "all"
+    | "not_started"
+    | "in_progress"
+    | "waiting_documents"
+    | "completed"
+    | "submitted"
+  >(
+    statusParam === "not_started" ||
+      statusParam === "in_progress" ||
+      statusParam === "waiting_documents" ||
+      statusParam === "completed" ||
+      statusParam === "submitted"
+      ? statusParam
+      : "all"
+  );
+
+  const [taskFilter, setTaskFilter] = useState<"all" | TaskType>(
+    taskParam === "bookkeeping" ||
+      taskParam === "vat" ||
+      taskParam === "paye" ||
+      taskParam === "payroll" ||
+      taskParam === "tax"
+      ? taskParam
+      : "all"
+  );
 
   const [loading, setLoading] = useState(true);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
@@ -94,8 +122,6 @@ function AccountingMonthlyWork() {
         setError("This page is only for Accounting businesses.");
         return;
       }
-
-      setBusinessId(profile.business_id);
 
       const { data: clientData, error: clientsError } = await supabase
         .from("accounting_clients")
@@ -221,7 +247,7 @@ function AccountingMonthlyWork() {
     loadMonthlyWork();
   }, []);
 
-  const rows = useMemo<WorkRow[]>(() => {
+  const rows = useMemo<WorkRow[]>((() => {
     return clients.map((client) => {
       const clientTasks = tasks.filter((task) => task.client_id === client.id);
 
@@ -236,7 +262,7 @@ function AccountingMonthlyWork() {
         tasks: taskMap,
       };
     });
-  }, [clients, tasks]);
+  }) as () => WorkRow[], [clients, tasks]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -255,27 +281,32 @@ function AccountingMonthlyWork() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(term));
 
-      const matchesFilter =
-        filter === "all" ||
-        Object.values(row.tasks).some((task) => task?.status === filter);
+      const matchesTaskAndStatus =
+        taskFilter === "all"
+          ? filter === "all" ||
+            Object.values(row.tasks).some((task) => task?.status === filter)
+          : filter === "all"
+            ? Boolean(row.tasks[taskFilter])
+            : row.tasks[taskFilter]?.status === filter;
 
-      return matchesSearch && matchesFilter;
+      return matchesSearch && matchesTaskAndStatus;
     });
-  }, [rows, search, filter]);
+  }, [rows, search, filter, taskFilter]);
 
   const summary = useMemo(() => {
-    const allTasks = tasks;
-
     return {
       totalClients: clients.length,
-      notStarted: allTasks.filter((task) => task.status === "not_started").length,
-      inProgress: allTasks.filter((task) => task.status === "in_progress").length,
-      waitingDocs: allTasks.filter((task) => task.status === "waiting_documents")
+      notStarted: tasks.filter((task) => task.status === "not_started").length,
+      inProgress: tasks.filter((task) => task.status === "in_progress").length,
+      waitingDocs: tasks.filter((task) => task.status === "waiting_documents")
         .length,
-      completed: allTasks.filter((task) => task.status === "completed").length,
-      submitted: allTasks.filter((task) => task.status === "submitted").length,
+      completed: tasks.filter((task) => task.status === "completed").length,
+      submitted: tasks.filter((task) => task.status === "submitted").length,
     };
   }, [clients, tasks]);
+
+  const visibleTaskTypes: TaskType[] =
+    taskFilter === "all" ? TASK_TYPES : [taskFilter];
 
   const monthLabel = new Date().toLocaleDateString("en-ZA", {
     month: "long",
@@ -326,6 +357,19 @@ function AccountingMonthlyWork() {
         />
 
         <select
+          value={taskFilter}
+          onChange={(e) => setTaskFilter(e.target.value as "all" | TaskType)}
+          style={selectStyle}
+        >
+          <option value="all">All Work Types</option>
+          <option value="bookkeeping">Bookkeeping</option>
+          <option value="vat">VAT</option>
+          <option value="paye">PAYE</option>
+          <option value="payroll">Payroll</option>
+          <option value="tax">Tax</option>
+        </select>
+
+        <select
           value={filter}
           onChange={(e) =>
             setFilter(
@@ -342,7 +386,7 @@ function AccountingMonthlyWork() {
         >
           <option value="all">All Tasks</option>
           <option value="not_started">Not Started</option>
-          <option value="in_progress">In Progress</option>
+          <option value="in_progress">Started</option>
           <option value="waiting_documents">Waiting Documents</option>
           <option value="completed">Completed</option>
           <option value="submitted">Submitted</option>
@@ -374,11 +418,13 @@ function AccountingMonthlyWork() {
               <tr>
                 <th style={thStyle}>Client</th>
                 <th style={thStyle}>Business</th>
-                <th style={thStyle}>Bookkeeping</th>
-                <th style={thStyle}>VAT</th>
-                <th style={thStyle}>PAYE</th>
-                <th style={thStyle}>Payroll</th>
-                <th style={thStyle}>Tax</th>
+
+                {visibleTaskTypes.map((taskType) => (
+                  <th key={taskType} style={thStyle}>
+                    {getTaskTypeLabel(taskType)}
+                  </th>
+                ))}
+
                 <th style={thStyle}>Assigned</th>
                 <th style={thStyle}>Open</th>
               </tr>
@@ -390,7 +436,7 @@ function AccountingMonthlyWork() {
                   <td style={tdStyle}>{row.client.client_name}</td>
                   <td style={tdStyle}>{row.client.business_name || "-"}</td>
 
-                  {TASK_TYPES.map((taskType) => (
+                  {visibleTaskTypes.map((taskType) => (
                     <td key={taskType} style={tdStyle}>
                       <TaskCell
                         task={row.tasks[taskType]}
@@ -417,9 +463,8 @@ function AccountingMonthlyWork() {
       )}
 
       <section style={noteStyle}>
-        <strong>Saved in Supabase:</strong> These task statuses are now real.
-        When you click Start, Waiting Docs, Complete, or Submit, the status and
-        date are stored in the accounting_monthly_tasks table.
+        <strong>Saved in Supabase:</strong> These task statuses are real. You can
+        now filter by work type and status, for example VAT + Not Started.
       </section>
     </div>
   );
@@ -598,6 +643,23 @@ function getRequiredTaskTypes(client: AccountingClient): TaskType[] {
   if (client.financial_year_end) taskTypes.push("tax");
 
   return taskTypes;
+}
+
+function getTaskTypeLabel(taskType: TaskType) {
+  switch (taskType) {
+    case "bookkeeping":
+      return "Bookkeeping";
+    case "vat":
+      return "VAT";
+    case "paye":
+      return "PAYE";
+    case "payroll":
+      return "Payroll";
+    case "tax":
+      return "Tax";
+    default:
+      return taskType;
+  }
 }
 
 function getStatusLabel(status: TaskStatus) {

@@ -14,6 +14,7 @@ import AccountingClientNew from "./modules/accounting/pages/AccountingClientNew"
 import AccountingClientDetail from "./modules/accounting/pages/AccountingClientDetail";
 import AccountingMonthlyWork from "./modules/accounting/pages/AccountingMonthlyWork";
 import AccountingDocuments from "./modules/accounting/pages/AccountingDocuments";
+import AccountingSummary from "./modules/accounting/pages/AccountingSummary";
 
 
 /* GAS OWNER */
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="/accounting/clients/:id" element={<AccountingClientDetail />} />
         <Route path="/accounting/monthly-work" element={<AccountingMonthlyWork />} />
         <Route path="/accounting/documents" element={<AccountingDocuments />} />
+        <Route path="/accounting/summary" element={<AccountingSummary />} />
 
 
         {/* GAS OWNER */}

@@ -186,6 +186,13 @@ function OwnerAccountingDashboard() {
           button="Open Documents"
           to="/accounting/documents"
        />
+
+        <DashboardCard
+          title="Summary"
+          text="View client totals, monthly work, documents and staff workload."
+          button="Open Summary"
+          to="/accounting/summary"
+       />
       </div>
     </div>
   );

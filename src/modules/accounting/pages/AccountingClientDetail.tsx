@@ -23,12 +23,40 @@ type AccountingClient = {
   notes: string | null;
 };
 
+type AccountingMonthlyTask = {
+  id: string;
+  task_type: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  submitted_at: string | null;
+};
+
+type AccountingDocumentTask = {
+  id: string;
+  document_type: string;
+  status: string;
+  requested_at: string | null;
+  received_at: string | null;
+  filed_at: string | null;
+};
+
 export default function AccountingClientDetail() {
   const { id } = useParams();
 
   const [client, setClient] = useState<AccountingClient | null>(null);
+  const [monthlyTasks, setMonthlyTasks] = useState<AccountingMonthlyTask[]>([]);
+  const [documentTasks, setDocumentTasks] = useState<AccountingDocumentTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  function getMonthStart() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}-01`;
+}
 
   async function loadClient() {
     try {
@@ -76,18 +104,42 @@ export default function AccountingClientDetail() {
         return;
       }
 
-      setClient(data as AccountingClient);
-    } catch (err) {
-      console.error(err);
-      setError("Could not load accounting client.");
-    } finally {
-      setLoading(false);
-    }
-  }
+      const loadedClient = data as AccountingClient;
+        setClient(loadedClient);
 
-  useEffect(() => {
-    loadClient();
-  }, [id]);
+      const monthStart = getMonthStart();
+
+      const { data: monthlyData, error: monthlyError } = await supabase
+        .from("accounting_monthly_tasks")
+        .select("id, task_type, status, started_at, completed_at, submitted_at")
+        .eq("business_id", profile.business_id)
+        .eq("client_id", loadedClient.id)
+        .eq("month_start", monthStart);
+
+      if (monthlyError) throw monthlyError;
+
+      const { data: documentData, error: documentError } = await supabase
+        .from("accounting_document_tasks")
+        .select("id, document_type, status, requested_at, received_at, filed_at")
+        .eq("business_id", profile.business_id)
+        .eq("client_id", loadedClient.id)
+        .eq("month_start", monthStart);
+
+      if (documentError) throw documentError;
+
+      setMonthlyTasks(monthlyData ?? []);
+      setDocumentTasks(documentData ?? []);
+          } catch (err) {
+            console.error(err);
+            setError("Could not load accounting client.");
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        useEffect(() => {
+            loadClient();
+          }, [id]);
 
   return (
     <div style={pageStyle}>
@@ -172,6 +224,62 @@ export default function AccountingClientDetail() {
             <Card title="Notes">
               <p style={normalTextStyle}>{client.notes || "No notes yet."}</p>
             </Card>
+
+            <Card title="This Month’s Work">
+              {monthlyTasks.length === 0 ? (
+                <p style={normalTextStyle}>
+                  No monthly work created yet. Open Monthly Work once to generate tasks.
+                </p>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                     <th style={thStyle}>Work</th>
+                     <th style={thStyle}>Status</th>
+                     <th style={thStyle}>Date</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                   {monthlyTasks.map((task) => (
+                     <tr key={task.id}>
+                        <td style={tdStyle}>{formatTaskType(task.task_type)}</td>
+                        <td style={tdStyle}>{formatStatus(task.status)}</td>
+                        <td style={tdStyle}>{formatTaskDate(task)}</td>
+                     </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Card>
+
+            <Card title="This Month’s Documents">
+  {documentTasks.length === 0 ? (
+    <p style={normalTextStyle}>
+      No document tasks created yet. Open Documents once to generate tasks.
+    </p>
+  ) : (
+    <table style={tableStyle}>
+      <thead>
+        <tr>
+          <th style={thStyle}>Document</th>
+          <th style={thStyle}>Status</th>
+          <th style={thStyle}>Date</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {documentTasks.map((doc) => (
+          <tr key={doc.id}>
+            <td style={tdStyle}>{formatDocumentType(doc.document_type)}</td>
+            <td style={tdStyle}>{formatStatus(doc.status)}</td>
+            <td style={tdStyle}>{formatDocumentDate(doc)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+           </Card>
           </section>
         </>
       )}
@@ -298,6 +406,63 @@ const gridStyle: CSSProperties = {
   gap: 20,
 };
 
+function formatTaskType(value: string) {
+  return value
+    .replace("bookkeeping", "Bookkeeping")
+    .replace("vat", "VAT")
+    .replace("paye", "PAYE")
+    .replace("payroll", "Payroll")
+    .replace("tax", "Tax");
+}
+
+function formatDocumentType(value: string) {
+  return value
+    .replace("bank_statements", "Bank Statements")
+    .replace("invoices_receipts", "Invoices / Receipts")
+    .replace("vat_documents", "VAT Documents")
+    .replace("payroll_documents", "Payroll Documents")
+    .replace("tax_documents", "Tax Documents");
+}
+
+function formatStatus(value: string) {
+  return value
+    .replace("not_started", "Not Started")
+    .replace("in_progress", "Started")
+    .replace("waiting_documents", "Waiting Documents")
+    .replace("needed", "Needed")
+    .replace("requested", "Requested")
+    .replace("received", "Received")
+    .replace("completed", "Completed")
+    .replace("submitted", "Submitted")
+    .replace("filed", "Filed");
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleDateString("en-ZA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatTaskDate(task: AccountingMonthlyTask) {
+  if (task.submitted_at) return formatDate(task.submitted_at);
+  if (task.completed_at) return formatDate(task.completed_at);
+  if (task.started_at) return formatDate(task.started_at);
+
+  return "-";
+}
+
+function formatDocumentDate(doc: AccountingDocumentTask) {
+  if (doc.filed_at) return formatDate(doc.filed_at);
+  if (doc.received_at) return formatDate(doc.received_at);
+  if (doc.requested_at) return formatDate(doc.requested_at);
+
+  return "-";
+}
+
 const cardStyle: CSSProperties = {
   padding: 22,
   border: "1px solid #ddd",
@@ -335,4 +500,22 @@ const errorStyle: CSSProperties = {
   background: "#fee2e2",
   color: "#991b1b",
   fontWeight: 700,
+};
+
+const tableStyle: CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: 12,
+};
+
+const thStyle: CSSProperties = {
+  textAlign: "left",
+  padding: 10,
+  background: "#f2f2f2",
+  borderBottom: "1px solid #ddd",
+};
+
+const tdStyle: CSSProperties = {
+  padding: 10,
+  borderBottom: "1px solid #eee",
 };
