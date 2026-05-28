@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../shared/lib/supabase";
+import { useNavigate } from "react-router-dom";
 
 type Business = {
   name: string;
@@ -25,6 +26,7 @@ function OwnerAccountingDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   async function loadDashboard() {
     try {
@@ -40,12 +42,17 @@ function OwnerAccountingDashboard() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("id, role, business_id")
+        .select("business_id, business_type, role")
         .eq("id", userData.user.id)
         .single();
 
       if (profileError || !profile?.business_id) {
         setError("Profile or business not found.");
+        return;
+      }
+
+      if (profile.role === "clerk") {
+        navigate("/accounting/staff", { replace: true });
         return;
       }
 

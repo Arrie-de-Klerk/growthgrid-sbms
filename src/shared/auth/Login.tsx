@@ -31,7 +31,7 @@ export default function Login() {
     // 🔥 GET PROFILE
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, business_type")
+      .select("business_id, business_type, role")
       .eq("id", data.session.user.id)
       .single();
 
@@ -56,7 +56,11 @@ if (businessType === "gas") {
 
 // ACCOUNTING
 if (businessType === "accounting") {
-  navigate("/accounting", { replace: true });
+  if (role === "clerk") {
+    navigate("/accounting/staff");
+  } else {
+    navigate("/accounting");
+  }
   return;
 }
 
