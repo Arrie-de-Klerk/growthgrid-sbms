@@ -13,6 +13,8 @@ type AccountingClient = {
   is_paye_registered: boolean;
   has_payroll: boolean;
   status: string;
+  assigned_staff: string | null;
+  assigned_staff_email: string | null;
 };
 
 function AccountingClients() {
@@ -42,7 +44,7 @@ function AccountingClients() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("business_id, business_type")
+        .select("business_id, role, business_type")
         .eq("id", userData.user.id)
         .single();
 
@@ -58,16 +60,26 @@ function AccountingClients() {
         return;
       }
 
-      const { data, error: clientsError } = await supabase
+      const userEmail = userData.user.email?.toLowerCase() || "";
+
+       let clientsQuery = supabase
         .from("accounting_clients")
         .select(
-          "id, client_name, business_name, phone, email, is_vat_registered, is_paye_registered, has_payroll, status"
-        )
-        .eq("business_id", profile.business_id)
-        .order("created_at", { ascending: false });
+         "id, client_name, business_name, phone, email, is_vat_registered, is_paye_registered, has_payroll, status, assigned_staff, assigned_staff_email"
+      )
+       .eq("business_id", profile.business_id);
 
-      if (clientsError) throw clientsError;
+       if (profile.role === "clerk") {
+        clientsQuery = clientsQuery.eq("assigned_staff_email", userEmail);
+      }
 
+     const { data, error } = await clientsQuery.order("created_at", {
+  ascending: false,
+      });
+
+        if (error) throw error;
+
+      setClients((data ?? []) as AccountingClient[]);
       setClients((data ?? []) as AccountingClient[]);
     } catch (err) {
       console.error(err);
@@ -186,6 +198,7 @@ function AccountingClients() {
                 <th style={thStyle}>Client</th>
                 <th style={thStyle}>Business</th>
                 <th style={thStyle}>Phone</th>
+                <th style={thStyle}>Staff</th>
                 <th style={thStyle}>Email</th>
                 <th style={thStyle}>VAT</th>
                 <th style={thStyle}>PAYE</th>
@@ -201,6 +214,7 @@ function AccountingClients() {
                   <td style={tdStyle}>{client.client_name}</td>
                   <td style={tdStyle}>{client.business_name || "-"}</td>
                   <td style={tdStyle}>{client.phone || "-"}</td>
+                  <td style={tdStyle}>{client.assigned_staff || "-"}</td>
                   <td style={tdStyle}>{client.email || "-"}</td>
                   <td style={tdStyle}>
                     {client.is_vat_registered ? "Yes" : "No"}

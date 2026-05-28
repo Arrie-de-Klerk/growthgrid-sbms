@@ -8,6 +8,7 @@ import ResetPassword from "./modules/gas/pages/ResetPassword";
 
 
 /* ACCOUNTING OWNER */
+import StaffAccountingDashboard from "./modules/accounting/pages/StaffAccountingDashboard";
 import OwnerAccountingDashboard from "./modules/accounting/pages/OwnerAccountingDashboard";
 import AccountingClients from "./modules/accounting/pages/AccountingClients";
 import AccountingClientNew from "./modules/accounting/pages/AccountingClientNew";
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/accounting/monthly-work" element={<AccountingMonthlyWork />} />
         <Route path="/accounting/documents" element={<AccountingDocuments />} />
         <Route path="/accounting/summary" element={<AccountingSummary />} />
+        <Route path="/accounting/staff" element={<StaffAccountingDashboard />} />
 
 
         {/* GAS OWNER */}
