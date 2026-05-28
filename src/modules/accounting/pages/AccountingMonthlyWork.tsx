@@ -23,6 +23,7 @@ type AccountingClient = {
   has_payroll: boolean;
   financial_year_end: string | null;
   assigned_staff: string | null;
+  assigned_staff_email: string | null;
   status: string;
 };
 
@@ -107,7 +108,7 @@ function AccountingMonthlyWork() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("business_id, business_type")
+        .select("business_id, business_type, role")
         .eq("id", userData.user.id)
         .single();
 
@@ -123,26 +124,49 @@ function AccountingMonthlyWork() {
         return;
       }
 
-      const { data: clientData, error: clientsError } = await supabase
-        .from("accounting_clients")
-        .select(
-          "id, client_name, business_name, phone, email, is_vat_registered, is_paye_registered, has_payroll, financial_year_end, assigned_staff, status"
-        )
-        .eq("business_id", profile.business_id)
-        .order("client_name", { ascending: true });
+      const userEmail = userData.user.email?.toLowerCase() || "";
 
-      if (clientsError) throw clientsError;
+         let clientsQuery = supabase
+           .from("accounting_clients")
+           .select(
+             "id, client_name, business_name, phone, email, is_vat_registered, is_paye_registered, has_payroll, financial_year_end, assigned_staff, assigned_staff_email, status"
+           )
+           .eq("business_id", profile.business_id);
+
+         if (profile.role === "clerk") {
+           clientsQuery = clientsQuery.eq("assigned_staff_email", userEmail);
+         }
+
+      const { data: clientData, error: clientsError } = await clientsQuery.order(
+           "client_name",
+          { ascending: true }
+        );
+
+        if (clientsError) throw clientsError;
 
       const loadedClients = (clientData ?? []) as AccountingClient[];
       setClients(loadedClients);
 
+      const clientIds = loadedClients.map((client) => client.id);
+
+        if (clientIds.length === 0) {
+        setTasks([]);
+        return;
+      }
+
       await createMissingTasks(profile.business_id, loadedClients);
 
-      const { data: taskData, error: tasksError } = await supabase
+      let tasksQuery = supabase
         .from("accounting_monthly_tasks")
         .select("*")
         .eq("business_id", profile.business_id)
         .eq("month_start", monthStart);
+
+      if (profile.role === "clerk") {
+        tasksQuery = tasksQuery.in("client_id", clientIds);
+      }
+
+      const { data: taskData, error: tasksError } = await tasksQuery;
 
       if (tasksError) throw tasksError;
 
