@@ -57,9 +57,9 @@ if (businessType === "gas") {
 // ACCOUNTING
 if (businessType === "accounting") {
   if (role === "clerk") {
-    navigate("/accounting/staff");
+    navigate("/accounting/staff", { replace: true });
   } else {
-    navigate("/accounting");
+    navigate("/accounting", { replace: true });
   }
   return;
 }
