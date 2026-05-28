@@ -569,22 +569,6 @@ const summaryValueStyle: CSSProperties = {
   marginTop: 4,
 };
 
-const filterRowStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-  marginBottom: 16,
-};
-
-const filterButtonStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 999,
-  border: "1px solid #ddd",
-  background: "#fff",
-  cursor: "pointer",
-  fontWeight: 700,
-};
-
 const searchStyle: CSSProperties = {
   padding: "12px",
   width: "100%",
@@ -727,12 +711,3 @@ const emptyStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const invoiceButtonStyle: React.CSSProperties = {
-  background: "#111",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 8,
-  cursor: "pointer",
-  fontWeight: 800,
-};
